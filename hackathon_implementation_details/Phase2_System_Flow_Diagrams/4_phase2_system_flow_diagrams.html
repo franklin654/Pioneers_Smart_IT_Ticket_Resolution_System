@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phase 2: System Flow Diagrams - AI Ticket Routing</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    color: #1a1a1a;
+    line-height: 1.6;
+    padding: 2rem;
+  }
+  
+  .container {
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+  
+  header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 2.5rem;
+    border-radius: 16px;
+    margin-bottom: 2rem;
+    box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+  }
+  
+  h1 {
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+  }
+  
+  .subtitle {
+    opacity: 0.95;
+    font-size: 1.1rem;
+  }
+  
+  .tabs {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    background: white;
+    padding: 0.5rem;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+  }
+  
+  .tab {
+    flex: 1;
+    padding: 1rem 2rem;
+    background: none;
+    border: none;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #666;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+  }
+  
+  .tab:hover {
+    background: #f0f4ff;
+    color: #667eea;
+  }
+  
+  .tab.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  }
+  
+  .tab-content {
+    display: none;
+  }
+  
+  .tab-content.active {
+    display: block;
+    animation: fadeIn 0.4s ease;
+  }
+  
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  
+  .card {
+    background: white;
+    border-radius: 16px;
+    padding: 2.5rem;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    margin-bottom: 2rem;
+  }
+  
+  .card h2 {
+    color: #667eea;
+    margin-bottom: 1.5rem;
+    font-size: 1.8rem;
+    font-weight: 700;
+  }
+  
+  .card h3 {
+    color: #1a1a1a;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-size: 1.3rem;
+  }
+  
+  .diagram-container {
+    background: white;
+    border-radius: 12px;
+    padding: 2rem;
+    overflow-x: auto;
+    border: 2px solid #e5e7eb;
+  }
+  
+  .info-box {
+    background: linear-gradient(135deg, #f0f4ff 0%, #e0e7ff 100%);
+    border-left: 5px solid #667eea;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    border-radius: 8px;
+  }
+  
+  .info-box h3 {
+    color: #667eea;
+    margin: 0 0 0.5rem 0;
+    font-size: 1.2rem;
+  }
+  
+  .info-box p {
+    margin: 0;
+    color: #4b5563;
+  }
+  
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin-top: 2rem;
+  }
+  
+  .feature-card {
+    background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
+    padding: 1.5rem;
+    border-radius: 12px;
+    border: 2px solid #e5e7eb;
+    transition: all 0.3s ease;
+  }
+  
+  .feature-card:hover {
+    border-color: #667eea;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+    transform: translateY(-2px);
+  }
+  
+  .feature-card h4 {
+    color: #667eea;
+    margin-bottom: 0.5rem;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  
+  .icon {
+    width: 28px;
+    height: 28px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 0.9rem;
+  }
+  
+  code {
+    background: #f4f4f4;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-family: 'Monaco', 'Courier New', monospace;
+    font-size: 0.9em;
+    color: #667eea;
+  }
+  
+  ul {
+    margin-left: 1.5rem;
+    margin-top: 0.5rem;
+  }
+  
+  li {
+    margin-bottom: 0.5rem;
+    color: #4b5563;
+  }
+  
+  .highlight {
+    background: #fef3c7;
+    padding: 0.2rem 0.4rem;
+    border-radius: 3px;
+    font-weight: 600;
+  }
+  
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+  }
+  
+  th, td {
+    padding: 1rem;
+    text-align: left;
+    border: 1px solid #e5e7eb;
+  }
+  
+  th {
+    background: #f9fafb;
+    font-weight: 600;
+    color: #667eea;
+  }
+  
+  tr:nth-child(even) {
+    background: #f9fafb;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>🔄 Phase 2: System Flow Diagrams</h1>
+    <p class="subtitle">AI Powered Intelligent Ticket Routing & Resolution Agent</p>
+    <p class="subtitle" style="margin-top: 0.5rem;">Data Flow | Sequence | State Transition Diagrams</p>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab(0)">📊 Data Flow Diagram</button>
+    <button class="tab" onclick="switchTab(1)">⏱️ Sequence Diagram</button>
+    <button class="tab" onclick="switchTab(2)">🔀 State Transition</button>
+  </div>
+
+  <!-- Tab 1: Data Flow Diagram -->
+  <div class="tab-content active" id="tab0">
+    <div class="info-box">
+      <h3>📊 Data Flow Diagram (DFD)</h3>
+      <p>Shows how data moves through the system from ingestion to resolution. Includes external entities, processes, data stores, and data flows.</p>
+    </div>
+
+    <div class="card">
+      <h2>Level 0: Context Diagram</h2>
+      <div class="diagram-container" id="dfd-context"></div>
+    </div>
+
+    <div class="card">
+      <h2>Level 1: Process Decomposition</h2>
+      <div class="diagram-container" id="dfd-level1"></div>
+    </div>
+
+    <div class="card">
+      <h2>Process Descriptions</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Process</th>
+            <th>Name</th>
+            <th>Input</th>
+            <th>Output</th>
+            <th>Data Stores</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>P1</strong></td>
+            <td>Ingest & Validate</td>
+            <td>Raw ticket data</td>
+            <td>Validated, PII-masked ticket</td>
+            <td>D1: Tickets DB</td>
+          </tr>
+          <tr>
+            <td><strong>P2</strong></td>
+            <td>Generate Embeddings</td>
+            <td>Ticket text</td>
+            <td>384-dim vector</td>
+            <td>D2: Vector Store</td>
+          </tr>
+          <tr>
+            <td><strong>P3</strong></td>
+            <td>Classify Ticket</td>
+            <td>Embedding vector</td>
+            <td>Category + confidence</td>
+            <td>D5: Classifications</td>
+          </tr>
+          <tr>
+            <td><strong>P4</strong></td>
+            <td>RAG Retrieval</td>
+            <td>Query embedding</td>
+            <td>Top-5 similar tickets</td>
+            <td>D2: Vector Store, D3: KB</td>
+          </tr>
+          <tr>
+            <td><strong>P5</strong></td>
+            <td>Generate Resolution</td>
+            <td>Ticket + similar tickets</td>
+            <td>Resolution steps</td>
+            <td>D6: Resolutions</td>
+          </tr>
+          <tr>
+            <td><strong>P6</strong></td>
+            <td>Evaluate & Route</td>
+            <td>Resolution + confidence</td>
+            <td>Routing decision</td>
+            <td>D7: Routing History</td>
+          </tr>
+          <tr>
+            <td><strong>P7</strong></td>
+            <td>Collect Feedback</td>
+            <td>Human review</td>
+            <td>Acceptance status</td>
+            <td>D4: Feedback DB</td>
+          </tr>
+          <tr>
+            <td><strong>P8</strong></td>
+            <td>Update Knowledge Base</td>
+            <td>Accepted resolutions</td>
+            <td>Updated embeddings</td>
+            <td>D2: Vector Store, D3: KB</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Data Stores</h2>
+      <div class="features-grid">
+        <div class="feature-card">
+          <h4><span class="icon">D1</span> Tickets DB</h4>
+          <p>PostgreSQL table storing all ticket metadata, status, assignments</p>
+        </div>
+        <div class="feature-card">
+          <h4><span class="icon">D2</span> Vector Store</h4>
+          <p>pgvector embeddings for semantic similarity search</p>
+        </div>
+        <div class="feature-card">
+          <h4><span class="icon">D3</span> Knowledge Base</h4>
+          <p>Historical ticket-resolution pairs for RAG retrieval</p>
+        </div>
+        <div class="feature-card">
+          <h4><span class="icon">D4</span> Feedback DB</h4>
+          <p>L1/L2/L3 agent feedback on resolutions</p>
+        </div>
+        <div class="feature-card">
+          <h4><span class="icon">D5</span> Classifications</h4>
+          <p>Classification results with confidence scores</p>
+        </div>
+        <div class="feature-card">
+          <h4><span class="icon">D6</span> Resolutions</h4>
+          <p>Generated and human resolutions</p>
+        </div>
+        <div class="feature-card">
+          <h4><span class="icon">D7</span> Routing History</h4>
+          <p>Audit trail of all routing decisions</p>
+        </div>
+        <div class="feature-card">
+          <h4><span class="icon">D8</span> Agent Logs</h4>
+          <p>AutoGen conversation history</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab 2: Sequence Diagram -->
+  <div class="tab-content" id="tab1">
+    <div class="info-box">
+      <h3>⏱️ Sequence Diagram</h3>
+      <p>Shows the time-ordered interaction between system components, from ticket arrival to resolution delivery. Includes all agent communications and decision points.</p>
+    </div>
+
+    <div class="card">
+      <h2>Complete Ticket Processing Flow</h2>
+      <div class="diagram-container" id="sequence-full"></div>
+    </div>
+
+    <div class="card">
+      <h2>Interaction Timeline</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Step</th>
+            <th>Actor</th>
+            <th>Action</th>
+            <th>Response Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td>ITSM System</td>
+            <td>POST /api/v1/tickets/ingest</td>
+            <td>< 100ms</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>API Gateway</td>
+            <td>Validate schema, authenticate</td>
+            <td>< 50ms</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>Ingestion Service</td>
+            <td>PII detection, deduplication</td>
+            <td>< 200ms</td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td>PostgreSQL</td>
+            <td>Insert ticket record</td>
+            <td>< 10ms</td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td>Embedding Service</td>
+            <td>Generate 384-dim vector</td>
+            <td>< 50ms</td>
+          </tr>
+          <tr>
+            <td>6</td>
+            <td>Classifier Agent</td>
+            <td>Predict category + confidence</td>
+            <td>< 100ms</td>
+          </tr>
+          <tr>
+            <td>7</td>
+            <td>RAG Resolver Agent</td>
+            <td>Retrieve top-5 similar tickets</td>
+            <td>< 500ms</td>
+          </tr>
+          <tr>
+            <td>8</td>
+            <td>Mistral-7B</td>
+            <td>Generate resolution steps</td>
+            <td>< 3s</td>
+          </tr>
+          <tr>
+            <td>9</td>
+            <td>Evaluator Agent</td>
+            <td>LLM-as-judge scoring (1-5)</td>
+            <td>< 1s</td>
+          </tr>
+          <tr>
+            <td>10</td>
+            <td>Routing Logic</td>
+            <td>Confidence-based decision</td>
+            <td>< 10ms</td>
+          </tr>
+          <tr>
+            <td>11</td>
+            <td>UserProxy</td>
+            <td>Human confirmation (if needed)</td>
+            <td>Variable</td>
+          </tr>
+        </tbody>
+      </table>
+      <p style="margin-top: 1rem; color: #6b7280;"><strong>Total end-to-end latency target:</strong> < 5 seconds (excluding human review)</p>
+    </div>
+
+    <div class="card">
+      <h2>Key Decision Points</h2>
+      <div class="features-grid">
+        <div class="feature-card">
+          <h4><span class="icon">✓</span> Auto-Resolve Path</h4>
+          <p><strong>Trigger:</strong> Confidence > 0.85 AND LLM-judge score ≥ 3.5</p>
+          <p><strong>Action:</strong> Send resolution to UserProxy → Close ticket</p>
+          <p><strong>Success Rate:</strong> Target ≥ 25%</p>
+        </div>
+        <div class="feature-card">
+          <h4><span class="icon">→</span> Department Route</h4>
+          <p><strong>Trigger:</strong> Confidence 0.60-0.85</p>
+          <p><strong>Action:</strong> Assign to L1/L2 with suggested resolution</p>
+          <p><strong>Success Rate:</strong> Target ≥ 60%</p>
+        </div>
+        <div class="feature-card">
+          <h4><span class="icon">↑</span> Escalate Path</h4>
+          <p><strong>Trigger:</strong> Confidence < 0.60 OR multi-domain ticket</p>
+          <p><strong>Action:</strong> Create context package → Route to L2/L3</p>
+          <p><strong>Escalation Accuracy:</strong> Target ≥ 90%</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab 3: State Transition Diagram -->
+  <div class="tab-content" id="tab2">
+    <div class="info-box">
+      <h3>🔀 State Transition Diagram</h3>
+      <p>Shows all possible states a ticket can be in and the transitions between them. Includes triggers, guards, and actions for each transition.</p>
+    </div>
+
+    <div class="card">
+      <h2>Ticket Lifecycle States</h2>
+      <div class="diagram-container" id="state-diagram"></div>
+    </div>
+
+    <div class="card">
+      <h2>State Definitions</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>State</th>
+            <th>Description</th>
+            <th>Entry Condition</th>
+            <th>Possible Next States</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>NEW</code></td>
+            <td>Ticket just ingested, awaiting classification</td>
+            <td>Initial state after ingestion</td>
+            <td>CLASSIFYING</td>
+          </tr>
+          <tr>
+            <td><code>CLASSIFYING</code></td>
+            <td>Embedding generation and category prediction in progress</td>
+            <td>Background task triggered</td>
+            <td>CLASSIFIED</td>
+          </tr>
+          <tr>
+            <td><code>CLASSIFIED</code></td>
+            <td>Category assigned, awaiting RAG retrieval</td>
+            <td>Classification confidence calculated</td>
+            <td>RETRIEVING</td>
+          </tr>
+          <tr>
+            <td><code>RETRIEVING</code></td>
+            <td>Searching for similar past tickets</td>
+            <td>RAG pipeline initiated</td>
+            <td>GENERATING</td>
+          </tr>
+          <tr>
+            <td><code>GENERATING</code></td>
+            <td>Mistral-7B generating resolution steps</td>
+            <td>Similar tickets retrieved</td>
+            <td>EVALUATING</td>
+          </tr>
+          <tr>
+            <td><code>EVALUATING</code></td>
+            <td>LLM-as-judge scoring resolution quality</td>
+            <td>Resolution generated</td>
+            <td>AUTO_RESOLVED, ASSIGNED, ESCALATED</td>
+          </tr>
+          <tr>
+            <td><code>AUTO_RESOLVED</code></td>
+            <td>System resolved with high confidence</td>
+            <td>Confidence > 0.85, UserProxy confirms</td>
+            <td>CLOSED, REOPENED</td>
+          </tr>
+          <tr>
+            <td><code>ASSIGNED</code></td>
+            <td>Routed to L1/L2 department with suggestion</td>
+            <td>Confidence 0.60-0.85</td>
+            <td>IN_PROGRESS, REASSIGNED</td>
+          </tr>
+          <tr>
+            <td><code>ESCALATED</code></td>
+            <td>Sent to L2/L3 specialist with context</td>
+            <td>Confidence < 0.60 or multi-domain</td>
+            <td>IN_PROGRESS</td>
+          </tr>
+          <tr>
+            <td><code>IN_PROGRESS</code></td>
+            <td>Human agent actively working on ticket</td>
+            <td>Agent accepts assignment</td>
+            <td>RESOLVED, REASSIGNED</td>
+          </tr>
+          <tr>
+            <td><code>RESOLVED</code></td>
+            <td>Solution provided, awaiting verification</td>
+            <td>Agent marks as resolved</td>
+            <td>CLOSED, REOPENED</td>
+          </tr>
+          <tr>
+            <td><code>CLOSED</code></td>
+            <td>Final state, ticket completed</td>
+            <td>Resolution verified/accepted</td>
+            <td>REOPENED (rare)</td>
+          </tr>
+          <tr>
+            <td><code>REOPENED</code></td>
+            <td>Previously closed ticket needs rework</td>
+            <td>User/agent reopens</td>
+            <td>IN_PROGRESS</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Transition Guards & Actions</h2>
+      <div class="features-grid">
+        <div class="feature-card">
+          <h4><span class="icon">G1</span> Confidence Check</h4>
+          <p><strong>Guard:</strong> <code>confidence_score >= threshold</code></p>
+          <p><strong>Thresholds:</strong> Auto: 0.85, Dept: 0.60, Escalate: < 0.60</p>
+        </div>
+        <div class="feature-card">
+          <h4><span class="icon">G2</span> Multi-Domain Check</h4>
+          <p><strong>Guard:</strong> <code>is_multi_domain == true</code></p>
+          <p><strong>Action:</strong> Force escalation regardless of confidence</p>
+        </div>
+        <div class="feature-card">
+          <h4><span class="icon">G3</span> UserProxy Approval</h4>
+          <p><strong>Guard:</strong> <code>user_confirmed == true</code></p>
+          <p><strong>Required for:</strong> AUTO_RESOLVED state</p>
+        </div>
+        <div class="feature-card">
+          <h4><span class="icon">A1</span> Log Routing Decision</h4>
+          <p><strong>Action:</strong> Write to <code>routing_history</code> table</p>
+          <p><strong>Data:</strong> State change, confidence, reason</p>
+        </div>
+        <div class="feature-card">
+          <h4><span class="icon">A2</span> Notify Agent</h4>
+          <p><strong>Action:</strong> Send email/Slack notification</p>
+          <p><strong>Triggers:</strong> ASSIGNED, ESCALATED states</p>
+        </div>
+        <div class="feature-card">
+          <h4><span class="icon">A3</span> Update Knowledge Base</h4>
+          <p><strong>Action:</strong> Re-embed accepted resolution</p>
+          <p><strong>Triggers:</strong> CLOSED state (if feedback = accepted)</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>State Metrics & Targets</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Target</th>
+            <th>Measurement</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Time in CLASSIFYING state</td>
+            <td>< 200ms avg</td>
+            <td>Embedding + classification latency</td>
+          </tr>
+          <tr>
+            <td>Time in GENERATING state</td>
+            <td>< 3s avg</td>
+            <td>Mistral-7B inference time</td>
+          </tr>
+          <tr>
+            <td>AUTO_RESOLVED rate</td>
+            <td>≥ 25%</td>
+            <td>% of tickets closed without human intervention</td>
+          </tr>
+          <tr>
+            <td>ESCALATED accuracy</td>
+            <td>≥ 90%</td>
+            <td>% of escalations deemed appropriate by L2/L3</td>
+          </tr>
+          <tr>
+            <td>REOPENED rate</td>
+            <td>< 5%</td>
+            <td>% of CLOSED tickets that transition to REOPENED</td>
+          </tr>
+          <tr>
+            <td>Total resolution time (NEW → CLOSED)</td>
+            <td>< 2 hours avg</td>
+            <td>End-to-end processing including human review</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import mermaid from 'https://esm.sh/mermaid@11/dist/mermaid.esm.min.mjs';
+
+const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+await document.fonts.ready;
+
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'base',
+  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  themeVariables: {
+    darkMode: dark,
+    fontSize: '14px',
+    primaryColor: '#667eea',
+    primaryTextColor: dark ? '#c2c0b6' : '#1a1a1a',
+    primaryBorderColor: '#667eea',
+    lineColor: dark ? '#9c9a92' : '#73726c',
+    secondaryColor: '#14b8a6',
+    tertiaryColor: '#f59e0b',
+  },
+  flowchart: {
+    curve: 'basis',
+    padding: 20
+  },
+  sequence: {
+    actorMargin: 80,
+    boxMargin: 10,
+    messageMargin: 45,
+    mirrorActors: true
+  }
+});
+
+// DFD Context Diagram
+const dfdContext = `graph TB
+    subgraph External["External Entities"]
+        ITSM[("ITSM Systems<br/>ServiceNow, Jira")]
+        Staff[("IT Support Staff<br/>L1, L2, L3")]
+        Data[("Data Sources<br/>Kaggle, Synthetic")]
+    end
+    
+    subgraph System["AI Ticket Routing System"]
+        Core(("Ticket<br/>Routing &<br/>Resolution"))
+    end
+    
+    ITSM -->|"Ticket Data<br/>(webhooks)"| Core
+    Data -->|"Training Data<br/>(CSV/JSON)"| Core
+    Core -->|"Resolutions<br/>(suggested/auto)"| Staff
+    Staff -->|"Feedback<br/>(accepted/rejected)"| Core
+    
+    style ITSM fill:#667eea,stroke:#4c51bf,color:#fff
+    style Staff fill:#10b981,stroke:#059669,color:#fff
+    style Data fill:#f59e0b,stroke:#d97706,color:#fff
+    style Core fill:#8b5cf6,stroke:#7c3aed,color:#fff
+    style External fill:#f9fafb,stroke:#e5e7eb
+    style System fill:#fef3c7,stroke:#fcd34d
+`;
+
+// DFD Level 1
+const dfdLevel1 = `graph TB
+    subgraph Input["Input Layer"]
+        ITSM[("ITSM<br/>Webhooks")]
+        CSV[("CSV<br/>Upload")]
+    end
+    
+    P1["P1: Ingest<br/>& Validate"]
+    P2["P2: Generate<br/>Embeddings"]
+    P3["P3: Classify<br/>Ticket"]
+    P4["P4: RAG<br/>Retrieval"]
+    P5["P5: Generate<br/>Resolution"]
+    P6["P6: Evaluate<br/>& Route"]
+    P7["P7: Collect<br/>Feedback"]
+    P8["P8: Update<br/>KB"]
+    
+    subgraph Stores["Data Stores"]
+        D1[("D1: Tickets DB")]
+        D2[("D2: Vector Store<br/>pgvector")]
+        D3[("D3: Knowledge Base")]
+        D4[("D4: Feedback DB")]
+    end
+    
+    subgraph Output["Output Layer"]
+        Staff[("L1/L2/L3<br/>Agents")]
+    end
+    
+    ITSM -->|raw ticket| P1
+    CSV -->|batch tickets| P1
+    P1 -->|validated| P2
+    P1 -.->|write| D1
+    
+    P2 -->|embedding| P3
+    P2 -.->|store| D2
+    
+    P3 -->|category + conf| P4
+    P4 -.->|query| D2
+    P4 -.->|retrieve| D3
+    
+    P4 -->|similar tickets| P5
+    P3 -->|context| P5
+    
+    P5 -->|resolution| P6
+    
+    P6 -->|routing decision| Staff
+    
+    Staff -->|feedback| P7
+    P7 -.->|log| D4
+    
+    P7 -->|accepted| P8
+    P8 -.->|re-embed| D2
+    P8 -.->|update| D3
+    
+    style P1 fill:#667eea,stroke:#4c51bf,color:#fff
+    style P2 fill:#14b8a6,stroke:#0d9488,color:#fff
+    style P3 fill:#8b5cf6,stroke:#7c3aed,color:#fff
+    style P4 fill:#f59e0b,stroke:#d97706,color:#fff
+    style P5 fill:#ef4444,stroke:#dc2626,color:#fff
+    style P6 fill:#ec4899,stroke:#db2777,color:#fff
+    style P7 fill:#10b981,stroke:#059669,color:#fff
+    style P8 fill:#6366f1,stroke:#4f46e5,color:#fff
+    
+    style D1 fill:#e5e7eb,stroke:#9ca3af
+    style D2 fill:#e5e7eb,stroke:#9ca3af
+    style D3 fill:#e5e7eb,stroke:#9ca3af
+    style D4 fill:#e5e7eb,stroke:#9ca3af
+`;
+
+// Sequence Diagram
+const sequenceFull = `sequenceDiagram
+    actor ITSM as ITSM System
+    participant API as API Gateway
+    participant Ingest as Ingestion Service
+    participant DB as PostgreSQL
+    participant Embed as Embedding Service
+    participant Class as Classifier Agent
+    participant RAG as RAG Resolver
+    participant LLM as Mistral-7B
+    participant Eval as Evaluator Agent
+    participant Route as Routing Logic
+    participant User as UserProxy/Human
+    
+    ITSM->>API: POST /tickets/ingest
+    activate API
+    API->>API: Validate schema + Auth
+    API->>Ingest: Forward ticket
+    activate Ingest
+    
+    Ingest->>Ingest: PII detection (Presidio)
+    Ingest->>Ingest: Deduplication check
+    Ingest->>DB: INSERT ticket
+    DB-->>Ingest: ticket_id
+    
+    Ingest->>Embed: generate_embedding(ticket_id)
+    activate Embed
+    Embed->>Embed: all-MiniLM-L6-v2.encode()
+    Embed->>DB: Store embedding (pgvector)
+    Embed-->>Ingest: embedding_id
+    deactivate Embed
+    
+    Ingest->>Class: classify(ticket_id)
+    activate Class
+    Class->>DB: Fetch embedding
+    Class->>Class: Predict category + confidence
+    Class->>DB: Store classification
+    Class-->>Ingest: {category, confidence}
+    deactivate Class
+    
+    Ingest-->>API: {ticket_id, status: "classified"}
+    deactivate Ingest
+    API-->>ITSM: 201 Created
+    deactivate API
+    
+    Note over Class,RAG: Async Agent Conversation (AutoGen)
+    
+    Class->>RAG: ticket_classified(category, confidence)
+    activate RAG
+    RAG->>DB: Vector similarity search (top-5)
+    DB-->>RAG: similar_tickets[]
+    
+    RAG->>LLM: generate_resolution(ticket, similar_tickets)
+    activate LLM
+    LLM->>LLM: Mistral-7B inference
+    LLM-->>RAG: resolution_steps[]
+    deactivate LLM
+    
+    RAG->>DB: Store resolution
+    RAG->>Eval: evaluate(resolution_id)
+    deactivate RAG
+    
+    activate Eval
+    Eval->>LLM: score(resolution) [LLM-as-judge]
+    LLM-->>Eval: {relevance:4, completeness:5, actionability:4}
+    Eval->>DB: Store evaluation scores
+    Eval->>Route: routing_decision(confidence, scores)
+    deactivate Eval
+    
+    activate Route
+    
+    alt Confidence > 0.85 AND avg_score >= 3.5
+        Route->>User: Present auto-resolution
+        activate User
+        User-->>Route: Confirm/Reject
+        deactivate User
+        
+        alt Confirmed
+            Route->>DB: UPDATE status='auto_resolved'
+            Route->>ITSM: Webhook: ticket_closed
+        else Rejected
+            Route->>User: Assign to L1 for manual review
+        end
+        
+    else Confidence 0.60-0.85
+        Route->>User: Assign to L1/L2 with suggestion
+        Route->>DB: UPDATE status='assigned'
+        
+    else Confidence < 0.60
+        Route->>User: Escalate to L2/L3 specialist
+        Route->>DB: UPDATE status='escalated'
+    end
+    
+    deactivate Route
+    
+    User->>DB: Submit feedback (accepted/rejected)
+    
+    alt Feedback = accepted
+        DB->>Embed: Re-embed resolution for KB
+        activate Embed
+        Embed->>DB: Update vector store
+        deactivate Embed
+        Note over DB: Active learning:<br/>KB grows with accepted resolutions
+    end
+`;
+
+// State Diagram
+const stateDiagram = `stateDiagram-v2
+    [*] --> NEW: Ticket ingested
+    
+    NEW --> CLASSIFYING: Embedding task triggered
+    CLASSIFYING --> CLASSIFIED: Category predicted
+    
+    CLASSIFIED --> RETRIEVING: RAG initiated
+    RETRIEVING --> GENERATING: Similar tickets found
+    GENERATING --> EVALUATING: Resolution created
+    
+    EVALUATING --> AUTO_RESOLVED: Confidence > 0.85<br/>UserProxy confirms
+    EVALUATING --> ASSIGNED: Confidence 0.60-0.85
+    EVALUATING --> ESCALATED: Confidence < 0.60<br/>OR multi-domain
+    
+    AUTO_RESOLVED --> CLOSED: Verified by system
+    
+    ASSIGNED --> IN_PROGRESS: Agent accepts
+    ESCALATED --> IN_PROGRESS: Specialist accepts
+    
+    IN_PROGRESS --> RESOLVED: Agent provides solution
+    IN_PROGRESS --> REASSIGNED: Incorrect routing
+    
+    REASSIGNED --> ASSIGNED: Route to correct dept
+    REASSIGNED --> ESCALATED: Needs specialist
+    
+    RESOLVED --> CLOSED: Verified by requester
+    
+    CLOSED --> REOPENED: User/agent reopens
+    REOPENED --> IN_PROGRESS: Reassigned for rework
+    
+    CLOSED --> [*]: Final state
+    
+    note right of AUTO_RESOLVED
+        Target: ≥25% of tickets
+        Requires UserProxy approval
+    end note
+    
+    note right of ESCALATED
+        Target accuracy: ≥90%
+        Context package provided
+    end note
+    
+    note right of CLOSED
+        Triggers KB update
+        if feedback = accepted
+    end note
+`;
+
+// Render all diagrams
+async function renderDiagrams() {
+  try {
+    const { svg: contextSvg } = await mermaid.render('dfd-context-svg', dfdContext);
+    document.getElementById('dfd-context').innerHTML = contextSvg;
+    
+    const { svg: level1Svg } = await mermaid.render('dfd-level1-svg', dfdLevel1);
+    document.getElementById('dfd-level1').innerHTML = level1Svg;
+    
+    const { svg: seqSvg } = await mermaid.render('sequence-svg', sequenceFull);
+    document.getElementById('sequence-full').innerHTML = seqSvg;
+    
+    const { svg: stateSvg } = await mermaid.render('state-svg', stateDiagram);
+    document.getElementById('state-diagram').innerHTML = stateSvg;
+    
+  } catch (error) {
+    console.error('Mermaid rendering error:', error);
+  }
+}
+
+renderDiagrams();
+</script>
+
+<script>
+function switchTab(index) {
+  document.querySelectorAll('.tab').forEach((tab, i) => {
+    tab.classList.toggle('active', i === index);
+  });
+  
+  document.querySelectorAll('.tab-content').forEach((content, i) => {
+    content.classList.toggle('active', i === index);
+  });
+}
+</script>
+
+</body>
+</html>

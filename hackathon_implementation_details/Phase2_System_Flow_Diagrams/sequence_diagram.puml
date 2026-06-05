@@ -1,0 +1,266 @@
+@startuml Ticket_Routing_Sequence_Diagram
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam handwritten false
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam defaultFontStyle bold
+skinparam ParticipantFontSize 14
+skinparam ParticipantFontStyle bold
+skinparam ActorFontSize 14
+skinparam ActorFontStyle bold
+skinparam SequenceMessageTextFontSize 13
+skinparam SequenceMessageTextFontStyle bold
+skinparam NoteFontSize 12
+skinparam NoteFontStyle bold
+skinparam TitleFontSize 18
+skinparam TitleFontStyle bold
+skinparam ArrowThickness 2
+skinparam SequenceLifeLineBorderThickness 2
+
+title AI Ticket Routing & Resolution - Complete Sequence Flow
+autonumber
+
+actor "ITSM System" as ITSM #667eea
+participant "API Gateway\n(Kong)" as API #667eea
+participant "Ingestion\nService" as Ingest #14b8a6
+database "PostgreSQL\n+ pgvector" as DB #6b7280
+participant "Embedding\nService" as Embed #8b5cf6
+participant "Classifier\nAgent" as Classifier #f59e0b
+participant "RAG Resolver\nAgent" as RAG #ef4444
+participant "Mistral-7B\n(Ollama)" as LLM #ec4899
+participant "Evaluator\nAgent" as Evaluator #10b981
+participant "Routing\nLogic" as Router #6366f1
+actor "UserProxy/\nHuman" as User #059669
+
+== Ticket Ingestion (Synchronous - 440ms) ==
+
+ITSM -> API: POST /api/v1/tickets/ingest
+activate API #667eea
+note right: < 50ms
+
+API -> API: Validate schema\nAuthenticate (OAuth 2.0 + JWT)
+API -> Ingest: Forward validated ticket
+activate Ingest #14b8a6
+
+Ingest -> Ingest: PII detection (Presidio)\nDetect: EMAIL, PHONE, SSN, NAMES
+note right: < 150ms
+
+Ingest -> Ingest: Deduplication check\n(MD5 hash + embedding similarity)
+note right: < 50ms
+
+Ingest -> DB: INSERT INTO tickets\n(title, description, category, priority, status='new')
+activate DB #6b7280
+note right: < 10ms
+DB --> Ingest: ticket_id, created_at
+deactivate DB
+
+Ingest -> Embed: generate_embedding(ticket_id)
+activate Embed #8b5cf6
+note right: Background task
+
+Embed -> Embed: all-MiniLM-L6-v2.encode()\nGenerate 384-dim vector
+note right: < 50ms
+
+Embed -> DB: INSERT INTO ticket_embeddings\n(ticket_id, embedding, model_version)
+activate DB #6b7280
+note right: < 20ms
+DB --> Embed: embedding_id
+deactivate DB
+deactivate Embed
+
+Ingest -> Classifier: classify_ticket(ticket_id)
+activate Classifier #f59e0b
+
+Classifier -> DB: SELECT embedding FROM ticket_embeddings\nWHERE ticket_id = ?
+activate DB #6b7280
+DB --> Classifier: embedding_vector[384]
+deactivate DB
+
+Classifier -> Classifier: Fine-tuned model prediction\nCategories: 6 or 24 (variant)\nOutput: {category, confidence, is_multi_domain}
+note right: < 100ms
+
+Classifier -> DB: INSERT INTO classifications\n(ticket_id, predicted_category, confidence)
+activate DB #6b7280
+note right: < 10ms
+DB --> Classifier: classification_id
+deactivate DB
+
+Classifier --> Ingest: {category, confidence, is_multi_domain}
+deactivate Classifier
+
+Ingest --> API: {ticket_id, status: "classified",\nconfidence, category}
+deactivate Ingest
+
+API --> ITSM: 201 Created\n{ticket_id, estimated_resolution_time}
+deactivate API
+
+note over Classifier, User: **Async Agent Workflow (AutoGen GroupChat) - 4.5 seconds**
+
+== RAG Retrieval & Resolution Generation ==
+
+Classifier -> RAG: ticket_classified(ticket_id, category, confidence)
+activate RAG #ef4444
+
+RAG -> DB: -- Hybrid Retrieval (70% Dense + 30% BM25) --\nSELECT t.*, r.resolution_text,\n  1 - (e.embedding <=> query_embedding) AS similarity\nFROM tickets t\nJOIN ticket_embeddings e ON t.id = e.ticket_id\nJOIN resolutions r ON t.id = r.ticket_id\nWHERE t.category = ? AND t.status = 'resolved'\nORDER BY similarity DESC LIMIT 10
+activate DB #6b7280
+note right: < 500ms\n(pgvector IVFFlat index)
+DB --> RAG: top_10_similar_tickets[]
+deactivate DB
+
+RAG -> RAG: MMR Reranking (λ=0.7)\nMaximize relevance, minimize redundancy\nReduce to top-5 diverse results
+
+RAG -> LLM: generate_resolution(\n  ticket=current_ticket,\n  similar_tickets=top_5,\n  category=predicted_category\n)
+activate LLM #ec4899
+
+LLM -> LLM: Mistral-7B-Instruct inference\nPrompt engineering:\n- System: "You are an expert IT support engineer"\n- Context: Similar ticket resolutions\n- Task: Generate 3-5 numbered resolution steps
+note right: < 3000ms\n(GPU inference)
+
+LLM --> RAG: resolution_steps[]\n[\n  "1. Check VPN concentrator logs...",\n  "2. Verify SSL certificate validity...",\n  "3. Update VPN client to v2.5.3...",\n  "4. Test connection with keep-alive=300s"\n]
+deactivate LLM
+
+RAG -> DB: INSERT INTO resolutions\n(ticket_id, resolution_text, resolution_steps, created_by='auto')
+activate DB #6b7280
+note right: < 10ms
+DB --> RAG: resolution_id
+deactivate DB
+
+RAG -> Evaluator: evaluate_resolution(resolution_id)
+deactivate RAG
+
+== LLM-as-Judge Evaluation ==
+
+activate Evaluator #10b981
+
+Evaluator -> LLM: score_resolution(\n  resolution_id,\n  criteria=['relevance', 'completeness', 'actionability']\n)
+activate LLM #ec4899
+
+LLM -> LLM: LLM-as-judge scoring (1-5 scale)\n- Relevance: Does it address the ticket?\n- Completeness: Are all steps included?\n- Actionability: Can L1 agent execute it?
+note right: < 1000ms
+
+LLM --> Evaluator: {\n  relevance_score: 4,\n  completeness_score: 5,\n  actionability_score: 4,\n  avg_score: 4.33\n}
+deactivate LLM
+
+Evaluator -> DB: INSERT INTO llm_evaluations\n(resolution_id, relevance_score, completeness_score, actionability_score)
+activate DB #6b7280
+note right: < 10ms
+DB --> Evaluator: evaluation_id
+deactivate DB
+
+Evaluator -> Router: make_routing_decision(\n  ticket_id,\n  confidence=0.87,\n  avg_score=4.33\n)
+deactivate Evaluator
+
+== Confidence-Based Routing Decision ==
+
+activate Router #6366f1
+
+Router -> Router: Routing logic:\nIF confidence > 0.85 AND avg_score >= 3.5:\n  path = AUTO_RESOLVED\nELSE IF confidence >= 0.60:\n  path = ASSIGNED\nELSE:\n  path = ESCALATED
+note right: < 10ms
+
+alt Confidence > 0.85 AND avg_score >= 3.5 [AUTO-RESOLVE PATH - Target: 25%]
+    
+    Router -> User: present_auto_resolution(\n  ticket_id,\n  resolution_steps,\n  confidence=0.87\n)
+    activate User #059669
+    note right: Human review required
+    
+    User --> Router: user_confirmation = True
+    deactivate User
+    
+    Router -> DB: UPDATE tickets\nSET status='auto_resolved', resolved_at=NOW()\nWHERE id = ?
+    activate DB #6b7280
+    DB --> Router: rows_affected=1
+    deactivate DB
+    
+    Router -> DB: INSERT INTO routing_history\n(ticket_id, routing_path='auto_resolved',\n confidence_score=0.87, decision_reason='High confidence + High LLM score')
+    activate DB #6b7280
+    DB --> Router: history_id
+    deactivate DB
+    
+    Router -> ITSM: webhook_notify(\n  event='ticket.closed',\n  ticket_id,\n  resolution_method='auto'\n)
+    
+else Confidence 0.60-0.85 [DEPARTMENT ROUTE - Target: 60-70%]
+    
+    Router -> User: assign_to_department(\n  ticket_id,\n  department=predicted_category,\n  suggested_resolution=resolution_steps\n)
+    activate User #059669
+    note right: L1/L2 agent review
+    
+    Router -> DB: UPDATE tickets\nSET status='assigned', assigned_to=department_id\nWHERE id = ?
+    activate DB #6b7280
+    DB --> Router: rows_affected=1
+    deactivate DB
+    
+    Router -> DB: INSERT INTO routing_history\n(ticket_id, routing_path='assigned',\n confidence_score=0.72)
+    activate DB #6b7280
+    DB --> Router: history_id
+    deactivate DB
+    
+    Router --> User: Email + Slack notification\n"New ticket assigned: TKT-0123"
+    deactivate User
+    
+else Confidence < 0.60 OR is_multi_domain [ESCALATE - Target: 5-15%]
+    
+    Router -> User: escalate_to_specialist(\n  ticket_id,\n  context_package={\n    ticket, classification,\n    similar_tickets, attempted_resolution\n  }\n)
+    activate User #059669
+    note right: L2/L3 specialist
+    
+    Router -> DB: UPDATE tickets\nSET status='escalated', priority='high'\nWHERE id = ?
+    activate DB #6b7280
+    DB --> Router: rows_affected=1
+    deactivate DB
+    
+    Router -> DB: INSERT INTO routing_history\n(ticket_id, routing_path='escalated',\n confidence_score=0.45, decision_reason='Low confidence')
+    activate DB #6b7280
+    DB --> Router: history_id
+    deactivate DB
+    
+    Router --> User: URGENT notification\n"Escalated ticket requires specialist"
+    deactivate User
+    
+end
+
+deactivate Router
+
+== Feedback Loop (Active Learning) ==
+
+User -> DB: submit_feedback(\n  resolution_id,\n  feedback_type='accepted',\n  rating=5,\n  comments='Resolved the issue'\n)
+activate DB #6b7280
+note right: Human provides feedback
+
+DB -> DB: INSERT INTO resolution_feedback\n(resolution_id, feedback_type, rating, reviewed_by)
+
+alt Feedback = 'accepted'
+    
+    DB -> Embed: trigger_kb_update(resolution_id)
+    activate Embed #8b5cf6
+    
+    Embed -> DB: SELECT ticket.*, resolution.*\nFROM tickets t JOIN resolutions r\nWHERE r.id = resolution_id
+    DB --> Embed: ticket_resolution_pair
+    
+    Embed -> Embed: Re-embed accepted resolution\ntext = f"{title}. {description}. Resolution: {steps}"\nembedding = all-MiniLM-L6-v2.encode(text)
+    note right: Knowledge base grows!
+    
+    Embed -> DB: UPDATE ticket_embeddings\nSET embedding = new_embedding\nWHERE ticket_id = ?
+    DB --> Embed: rows_affected=1
+    
+    Embed -> DB: UPDATE tickets\nSET status='resolved', resolved_at=NOW()
+    DB --> Embed: rows_affected=1
+    
+    deactivate Embed
+    
+    note over DB: **Active Learning:**\nAccepted resolutions improve\nfuture RAG retrieval quality
+    
+end
+
+deactivate DB
+
+note over ITSM, User
+  **Performance Summary:**
+  - Ingestion to API Response: < 440ms
+  - Total System Processing: < 5 seconds
+  - Auto-Resolve Rate Target: ≥ 25%
+  - Department Route Target: 60-70%
+  - Escalation Accuracy Target: ≥ 90%
+end note
+
+@enduml

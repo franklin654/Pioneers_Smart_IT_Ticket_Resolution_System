@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Data Model (ERD) - AI Ticket Routing System</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #f8f9fa;
+    color: #1a1a1a;
+    line-height: 1.6;
+  }
+  
+  .container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2rem;
+  }
+  
+  header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 2rem;
+    border-radius: 12px;
+    margin-bottom: 2rem;
+  }
+  
+  h1 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+  }
+  
+  .subtitle {
+    opacity: 0.9;
+    font-size: 1rem;
+  }
+  
+  .tabs {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    border-bottom: 2px solid #e0e0e0;
+  }
+  
+  .tab {
+    padding: 1rem 2rem;
+    background: none;
+    border: none;
+    font-size: 1rem;
+    font-weight: 500;
+    color: #666;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: all 0.3s ease;
+  }
+  
+  .tab:hover {
+    color: #667eea;
+  }
+  
+  .tab.active {
+    color: #667eea;
+    border-bottom-color: #667eea;
+  }
+  
+  .tab-content {
+    display: none;
+  }
+  
+  .tab-content.active {
+    display: block;
+    animation: fadeIn 0.3s ease;
+  }
+  
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  
+  .card {
+    background: white;
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    margin-bottom: 2rem;
+  }
+  
+  .card h2 {
+    color: #667eea;
+    margin-bottom: 1rem;
+    font-size: 1.5rem;
+  }
+  
+  .erd-container {
+    background: white;
+    border-radius: 8px;
+    padding: 1rem;
+    overflow-x: auto;
+  }
+  
+  .info-box {
+    background: #f0f4ff;
+    border-left: 4px solid #667eea;
+    padding: 1rem;
+    margin-bottom: 2rem;
+    border-radius: 4px;
+  }
+  
+  .info-box h3 {
+    color: #667eea;
+    margin-bottom: 0.5rem;
+    font-size: 1.1rem;
+  }
+  
+  .legend {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+    margin-top: 2rem;
+  }
+  
+  .legend-item {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 8px;
+    border-left: 4px solid #667eea;
+  }
+  
+  .legend-item h4 {
+    color: #667eea;
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+  }
+  
+  .legend-item p {
+    font-size: 0.85rem;
+    color: #666;
+  }
+  
+  .key-features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+  }
+  
+  .feature {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+  }
+  
+  .feature h4 {
+    color: #1a1a1a;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  
+  .feature-icon {
+    width: 24px;
+    height: 24px;
+    background: #667eea;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 0.9rem;
+  }
+  
+  code {
+    background: #f4f4f4;
+    padding: 0.2rem 0.4rem;
+    border-radius: 3px;
+    font-family: 'Monaco', 'Courier New', monospace;
+    font-size: 0.9em;
+  }
+  
+  ul {
+    margin-left: 1.5rem;
+    margin-top: 0.5rem;
+  }
+  
+  li {
+    margin-bottom: 0.3rem;
+  }
+  
+  /* Enhanced Mermaid Diagram Styling */
+  .erd-container svg {
+    font-weight: 500 !important;
+  }
+  
+  .erd-container .er.entityLabel {
+    font-weight: 700 !important;
+    font-size: 18px !important;
+    fill: #000000 !important;
+  }
+  
+  .erd-container .er.attributeBoxEven,
+  .erd-container .er.attributeBoxOdd {
+    font-weight: 500 !important;
+    font-size: 15px !important;
+    fill: #1a1a1a !important;
+  }
+  
+  .erd-container text {
+    font-weight: 500 !important;
+    fill: #000000 !important;
+  }
+  
+  .erd-container .er.relationshipLabel {
+    font-weight: 600 !important;
+    font-size: 14px !important;
+    fill: #2a2a2a !important;
+  }
+  
+  .erd-container .er.entityBox {
+    stroke: #333333 !important;
+    stroke-width: 2px !important;
+  }
+  
+  @media (prefers-color-scheme: dark) {
+    .erd-container .er.entityLabel {
+      fill: #ffffff !important;
+    }
+    
+    .erd-container .er.attributeBoxEven,
+    .erd-container .er.attributeBoxOdd {
+      fill: #e0e0e0 !important;
+    }
+    
+    .erd-container text {
+      fill: #ffffff !important;
+    }
+    
+    .erd-container .er.relationshipLabel {
+      fill: #d0d0d0 !important;
+    }
+    
+    .erd-container .er.entityBox {
+      stroke: #b0b0b0 !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>📊 Data Model (Entity Relationship Diagram)</h1>
+    <p class="subtitle">AI Powered Intelligent Ticket Routing & Resolution Agent</p>
+    <p class="subtitle" style="margin-top: 0.5rem;">Version 1.0 | Hackathon Round 2 Documentation</p>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab(0)">Basic (6 Categories)</button>
+    <button class="tab" onclick="switchTab(1)">Granular (Subcategories)</button>
+    <button class="tab" onclick="switchTab(2)">Schema Details</button>
+  </div>
+
+  <!-- Tab 1: Basic 6-Category ERD -->
+  <div class="tab-content active" id="tab0">
+    <div class="info-box">
+      <h3>🎯 Basic Model: 6 Core Categories</h3>
+      <p>This variant uses the 6 primary categories as defined in the problem statement: <strong>Infrastructure, Application, Security, Database, Storage, Network</strong>. Ideal for initial implementation and rapid prototyping.</p>
+    </div>
+
+    <div class="card">
+      <h2>Entity Relationship Diagram (Basic)</h2>
+      <div class="erd-container" id="erd-basic"></div>
+    </div>
+
+    <div class="card">
+      <h2>Key Features - Basic Model</h2>
+      <div class="key-features">
+        <div class="feature">
+          <h4><span class="feature-icon">1</span> Simplified Category Structure</h4>
+          <p>Only 6 main categories with optional <code>subcategory</code> text field for flexibility</p>
+        </div>
+        <div class="feature">
+          <h4><span class="feature-icon">2</span> Direct Classification</h4>
+          <p>Faster training and inference with fewer classes to predict</p>
+        </div>
+        <div class="feature">
+          <h4><span class="feature-icon">3</span> Easier Department Mapping</h4>
+          <p>1:1 mapping between categories and IT departments</p>
+        </div>
+        <div class="feature">
+          <h4><span class="feature-icon">4</span> Lower Data Requirements</h4>
+          <p>Need ~150 tickets per category (900 total) for balanced training</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab 2: Granular Subcategory ERD -->
+  <div class="tab-content" id="tab1">
+    <div class="info-box">
+      <h3>🔬 Granular Model: 24 Subcategories</h3>
+      <p>This variant expands the 6 categories into 24 subcategories for precise routing and resolution. Better accuracy but requires more training data (50-100 tickets per subcategory = 1,200-2,400 total).</p>
+    </div>
+
+    <div class="card">
+      <h2>Entity Relationship Diagram (Granular)</h2>
+      <div class="erd-container" id="erd-granular"></div>
+    </div>
+
+    <div class="card">
+      <h2>Category → Subcategory Mapping</h2>
+      <div class="legend">
+        <div class="legend-item">
+          <h4>Infrastructure (4 subcategories)</h4>
+          <ul>
+            <li>Server & Compute</li>
+            <li>Virtualization (VMware, Hyper-V)</li>
+            <li>Container Orchestration (K8s, Docker)</li>
+            <li>Hardware & Datacenter</li>
+          </ul>
+        </div>
+        <div class="legend-item">
+          <h4>Application (4 subcategories)</h4>
+          <ul>
+            <li>Web Applications</li>
+            <li>APIs & Microservices</li>
+            <li>Desktop Applications</li>
+            <li>UI/UX Issues</li>
+          </ul>
+        </div>
+        <div class="legend-item">
+          <h4>Security (4 subcategories)</h4>
+          <ul>
+            <li>Access Control & IAM</li>
+            <li>Vulnerabilities & Patches</li>
+            <li>Compliance & Auditing</li>
+            <li>Threat Detection</li>
+          </ul>
+        </div>
+        <div class="legend-item">
+          <h4>Database (4 subcategories)</h4>
+          <ul>
+            <li>Performance & Query Optimization</li>
+            <li>Backup & Recovery</li>
+            <li>Replication & HA</li>
+            <li>Schema & Migration</li>
+          </ul>
+        </div>
+        <div class="legend-item">
+          <h4>Storage (4 subcategories)</h4>
+          <ul>
+            <li>Block Storage (SAN, EBS)</li>
+            <li>File Storage (NAS, NFS)</li>
+            <li>Object Storage (S3, MinIO)</li>
+            <li>Backup Storage</li>
+          </ul>
+        </div>
+        <div class="legend-item">
+          <h4>Network (4 subcategories)</h4>
+          <ul>
+            <li>Connectivity & Routing</li>
+            <li>VPN & Remote Access</li>
+            <li>DNS & Load Balancing</li>
+            <li>Firewall & Security Groups</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Advantages of Granular Model</h2>
+      <div class="key-features">
+        <div class="feature">
+          <h4><span class="feature-icon">✓</span> Higher Routing Precision</h4>
+          <p>Route "Database Query Timeout" to DB Performance team, not generic DB team</p>
+        </div>
+        <div class="feature">
+          <h4><span class="feature-icon">✓</span> Better Similarity Matching</h4>
+          <p>RAG retrieval finds more relevant past tickets within subcategory</p>
+        </div>
+        <div class="feature">
+          <h4><span class="feature-icon">✓</span> Specialized Resolutions</h4>
+          <p>Resolution templates tailored to specific issue types</p>
+        </div>
+        <div class="feature">
+          <h4><span class="feature-icon">✓</span> Scalable Department Structure</h4>
+          <p>Map subcategories to specialized L2/L3 teams</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab 3: Schema Details -->
+  <div class="tab-content" id="tab2">
+    <div class="card">
+      <h2>Core Tables Schema</h2>
+      
+      <h3 style="margin-top: 1.5rem; margin-bottom: 1rem;">tickets</h3>
+      <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr style="background: #f4f4f4; text-align: left;">
+            <th style="padding: 0.75rem; border: 1px solid #ddd;">Column</th>
+            <th style="padding: 0.75rem; border: 1px solid #ddd;">Type</th>
+            <th style="padding: 0.75rem; border: 1px solid #ddd;">Constraints</th>
+            <th style="padding: 0.75rem; border: 1px solid #ddd;">Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>id</code></td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">SERIAL</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">PRIMARY KEY</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">Auto-incrementing ID</td>
+          </tr>
+          <tr style="background: #f9f9f9;">
+            <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>ticket_id</code></td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">VARCHAR(50)</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">UNIQUE, NOT NULL</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">External ticket ID (e.g., TKT-0001)</td>
+          </tr>
+          <tr>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>title</code></td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">VARCHAR(200)</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">NOT NULL</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">Short description</td>
+          </tr>
+          <tr style="background: #f9f9f9;">
+            <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>description</code></td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">TEXT</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">NOT NULL</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">Detailed problem description</td>
+          </tr>
+          <tr>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>category</code></td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">VARCHAR(50)</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;"></td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">Basic: 6 categories | Granular: 24 subcategories</td>
+          </tr>
+          <tr style="background: #f9f9f9;">
+            <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>priority</code></td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">VARCHAR(20)</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">NOT NULL</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">Low, Medium, High, Critical</td>
+          </tr>
+          <tr>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>status</code></td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">VARCHAR(20)</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">DEFAULT 'new'</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">new, in_progress, resolved, closed</td>
+          </tr>
+          <tr style="background: #f9f9f9;">
+            <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>assigned_to</code></td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">INTEGER</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">FK → users(id)</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">Assigned agent/department</td>
+          </tr>
+          <tr>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>created_at</code></td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">TIMESTAMP</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">DEFAULT NOW()</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">Ticket creation time</td>
+          </tr>
+          <tr style="background: #f9f9f9;">
+            <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>updated_at</code></td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">TIMESTAMP</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">DEFAULT NOW()</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">Last update time</td>
+          </tr>
+          <tr>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>resolved_at</code></td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">TIMESTAMP</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">NULL</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">Resolution timestamp</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3 style="margin-top: 1.5rem; margin-bottom: 1rem;">ticket_embeddings</h3>
+      <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr style="background: #f4f4f4; text-align: left;">
+            <th style="padding: 0.75rem; border: 1px solid #ddd;">Column</th>
+            <th style="padding: 0.75rem; border: 1px solid #ddd;">Type</th>
+            <th style="padding: 0.75rem; border: 1px solid #ddd;">Constraints</th>
+            <th style="padding: 0.75rem; border: 1px solid #ddd;">Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>id</code></td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">SERIAL</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">PRIMARY KEY</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">Auto-incrementing ID</td>
+          </tr>
+          <tr style="background: #f9f9f9;">
+            <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>ticket_id</code></td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">INTEGER</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">FK → tickets(id), UNIQUE</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">Reference to ticket</td>
+          </tr>
+          <tr>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>embedding</code></td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">VECTOR(384)</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">NOT NULL</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">384-dim vector from all-MiniLM-L6-v2</td>
+          </tr>
+          <tr style="background: #f9f9f9;">
+            <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>model_version</code></td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">VARCHAR(100)</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">NOT NULL</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">Model used for embedding</td>
+          </tr>
+          <tr>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>generated_at</code></td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">TIMESTAMP</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">DEFAULT NOW()</td>
+            <td style="padding: 0.75rem; border: 1px solid #ddd;">Embedding generation time</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Indexes for Performance</h2>
+      <pre style="background: #2d2d2d; color: #f8f8f2; padding: 1.5rem; border-radius: 8px; overflow-x: auto; font-family: 'Monaco', monospace; font-size: 0.9rem;">-- Tickets table indexes
+CREATE INDEX idx_tickets_category ON tickets(category);
+CREATE INDEX idx_tickets_priority ON tickets(priority);
+CREATE INDEX idx_tickets_status ON tickets(status);
+CREATE INDEX idx_tickets_created_at ON tickets(created_at DESC);
+CREATE INDEX idx_tickets_status_category ON tickets(status, category);
+
+-- Embeddings vector index (IVFFlat for cosine similarity)
+CREATE INDEX ON ticket_embeddings 
+USING ivfflat (embedding vector_cosine_ops)
+WITH (lists = 100);
+
+-- Resolutions table indexes
+CREATE INDEX idx_resolutions_ticket_id ON resolutions(ticket_id);
+CREATE INDEX idx_resolutions_created_at ON resolutions(created_at DESC);
+
+-- Classification table indexes
+CREATE INDEX idx_classifications_ticket_id ON classifications(ticket_id);
+CREATE INDEX idx_classifications_confidence ON classifications(confidence DESC);</pre>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import mermaid from 'https://esm.sh/mermaid@11/dist/mermaid.esm.min.mjs';
+
+const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+await document.fonts.ready;
+
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'base',
+  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  themeVariables: {
+    darkMode: dark,
+    fontSize: '16px',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    lineColor: dark ? '#b0b0b0' : '#2a2a2a',
+    textColor: dark ? '#e0e0e0' : '#000000',
+    primaryColor: dark ? '#4a4a4a' : '#f0f0f0',
+    primaryTextColor: dark ? '#ffffff' : '#000000',
+    primaryBorderColor: dark ? '#808080' : '#333333',
+    secondaryColor: dark ? '#3a3a3a' : '#ffffff',
+    tertiaryColor: dark ? '#2a2a2a' : '#fafafa',
+  },
+});
+
+// Basic 6-category ERD
+const basicERD = `erDiagram
+  TICKETS ||--o| TICKET_EMBEDDINGS : has
+  TICKETS ||--o{ CLASSIFICATIONS : receives
+  TICKETS ||--o{ RESOLUTIONS : has
+  TICKETS ||--o{ ROUTING_DECISIONS : triggers
+  TICKETS }o--|| USERS : "assigned to"
+  TICKETS }o--|| DEPARTMENTS : "routed to"
+  
+  RESOLUTIONS ||--o| RESOLUTION_FEEDBACK : receives
+  RESOLUTIONS ||--o| LLM_EVALUATIONS : evaluated_by
+  RESOLUTIONS ||--o{ RESOLUTION_SOURCES : cites
+  
+  AGENT_CONVERSATIONS ||--o{ AGENT_MESSAGES : contains
+  TICKETS ||--o| AGENT_CONVERSATIONS : initiates
+  
+  USERS }o--|| DEPARTMENTS : "belongs to"
+  
+  PII_DETECTIONS }o--|| TICKETS : "detected in"
+  
+  TICKETS {
+    int id PK
+    string ticket_id UK "TKT-0001"
+    string title
+    text description
+    string category "6 categories"
+    string priority "Low|Medium|High|Critical"
+    string status "new|in_progress|resolved"
+    int assigned_to FK
+    timestamp created_at
+    timestamp updated_at
+    timestamp resolved_at
+  }
+  
+  TICKET_EMBEDDINGS {
+    int id PK
+    int ticket_id FK
+    vector_384 embedding "pgvector"
+    string model_version "all-MiniLM-L6-v2"
+    timestamp generated_at
+  }
+  
+  CLASSIFICATIONS {
+    int id PK
+    int ticket_id FK
+    string predicted_category
+    float confidence "0.0-1.0"
+    boolean is_multi_domain
+    json category_probabilities
+    timestamp classified_at
+  }
+  
+  RESOLUTIONS {
+    int id PK
+    int ticket_id FK
+    text resolution_text
+    json resolution_steps "[]"
+    string created_by "auto|human"
+    timestamp created_at
+  }
+  
+  RESOLUTION_FEEDBACK {
+    int id PK
+    int resolution_id FK
+    string feedback_type "accepted|rejected|modified"
+    int rating "1-5"
+    text comments
+    string reviewed_by
+    timestamp reviewed_at
+  }
+  
+  LLM_EVALUATIONS {
+    int id PK
+    int resolution_id FK
+    int relevance_score "1-5"
+    int completeness_score "1-5"
+    int actionability_score "1-5"
+    float avg_score
+    timestamp evaluated_at
+  }
+  
+  RESOLUTION_SOURCES {
+    int id PK
+    int resolution_id FK
+    int source_ticket_id FK
+    float similarity_score
+  }
+  
+  ROUTING_DECISIONS {
+    int id PK
+    int ticket_id FK
+    float confidence_score
+    string routing_path "auto|dept|escalate"
+    text decision_reason
+    timestamp decided_at
+  }
+  
+  AGENT_CONVERSATIONS {
+    int id PK
+    int ticket_id FK
+    string conversation_state
+    timestamp started_at
+    timestamp completed_at
+  }
+  
+  AGENT_MESSAGES {
+    int id PK
+    int conversation_id FK
+    string agent_name "Classifier|RAG|Evaluator|UserProxy"
+    string message_type "tool_use|response"
+    json content
+    timestamp created_at
+  }
+  
+  USERS {
+    int id PK
+    string email UK
+    string name
+    string role "L1|L2|L3|Admin"
+    int department_id FK
+    timestamp created_at
+  }
+  
+  DEPARTMENTS {
+    int id PK
+    string name "Infrastructure|Application..."
+    json category_mapping "[]"
+    int sla_target_minutes
+  }
+  
+  PII_DETECTIONS {
+    int id PK
+    int ticket_id FK
+    json entities_detected "[]"
+    int entity_count
+    timestamp detected_at
+  }
+`;
+
+// Granular subcategory ERD (with subcategories table)
+const granularERD = `erDiagram
+  TICKETS ||--o| TICKET_EMBEDDINGS : has
+  TICKETS ||--o{ CLASSIFICATIONS : receives
+  TICKETS ||--o{ RESOLUTIONS : has
+  TICKETS ||--o{ ROUTING_DECISIONS : triggers
+  TICKETS }o--|| USERS : "assigned to"
+  TICKETS }o--|| SUBCATEGORIES : "classified as"
+  
+  SUBCATEGORIES }o--|| CATEGORIES : "belongs to"
+  DEPARTMENTS }o--|| CATEGORIES : "handles"
+  
+  RESOLUTIONS ||--o| RESOLUTION_FEEDBACK : receives
+  RESOLUTIONS ||--o| LLM_EVALUATIONS : evaluated_by
+  RESOLUTIONS ||--o{ RESOLUTION_SOURCES : cites
+  
+  AGENT_CONVERSATIONS ||--o{ AGENT_MESSAGES : contains
+  TICKETS ||--o| AGENT_CONVERSATIONS : initiates
+  
+  USERS }o--|| DEPARTMENTS : "belongs to"
+  
+  PII_DETECTIONS }o--|| TICKETS : "detected in"
+  
+  TICKETS {
+    int id PK
+    string ticket_id UK "TKT-0001"
+    string title
+    text description
+    int subcategory_id FK "24 subcategories"
+    string priority "Low|Medium|High|Critical"
+    string status "new|in_progress|resolved"
+    int assigned_to FK
+    timestamp created_at
+    timestamp updated_at
+    timestamp resolved_at
+  }
+  
+  CATEGORIES {
+    int id PK
+    string name UK "Infrastructure|Application|Security|Database|Access Management|Network"
+    text description
+  }
+  
+  SUBCATEGORIES {
+    int id PK
+    int category_id FK
+    string name UK "Server-Compute|Web-Apps|Access-Control..."
+    text description
+    json resolution_template
+  }
+  
+  TICKET_EMBEDDINGS {
+    int id PK
+    int ticket_id FK
+    vector_384 embedding "pgvector"
+    string model_version
+    timestamp generated_at
+  }
+  
+  CLASSIFICATIONS {
+    int id PK
+    int ticket_id FK
+    int predicted_subcategory_id FK
+    float confidence "0.0-1.0"
+    json subcategory_probabilities "top-3"
+    timestamp classified_at
+  }
+  
+  RESOLUTIONS {
+    int id PK
+    int ticket_id FK
+    text resolution_text
+    json resolution_steps
+    string created_by
+    timestamp created_at
+  }
+  
+  RESOLUTION_FEEDBACK {
+    int id PK
+    int resolution_id FK
+    string feedback_type
+    int rating "1-5"
+    text comments
+    string reviewed_by
+    timestamp reviewed_at
+  }
+  
+  LLM_EVALUATIONS {
+    int id PK
+    int resolution_id FK
+    int relevance_score "1-5"
+    int completeness_score "1-5"
+    int actionability_score "1-5"
+    float avg_score
+    timestamp evaluated_at
+  }
+  
+  RESOLUTION_SOURCES {
+    int id PK
+    int resolution_id FK
+    int source_ticket_id FK
+    float similarity_score
+  }
+  
+  ROUTING_DECISIONS {
+    int id PK
+    int ticket_id FK
+    float confidence_score
+    string routing_path
+    text decision_reason
+    timestamp decided_at
+  }
+  
+  AGENT_CONVERSATIONS {
+    int id PK
+    int ticket_id FK
+    string conversation_state
+    timestamp started_at
+    timestamp completed_at
+  }
+  
+  AGENT_MESSAGES {
+    int id PK
+    int conversation_id FK
+    string agent_name
+    string message_type
+    json content
+    timestamp created_at
+  }
+  
+  USERS {
+    int id PK
+    string email UK
+    string name
+    string role
+    int department_id FK
+    timestamp created_at
+  }
+  
+  DEPARTMENTS {
+    int id PK
+    string name
+    int category_id FK
+    json subcategory_specialization "[]"
+    int sla_target_minutes
+  }
+  
+  PII_DETECTIONS {
+    int id PK
+    int ticket_id FK
+    json entities_detected
+    int entity_count
+    timestamp detected_at
+  }
+`;
+
+// Render both ERDs
+async function renderERDs() {
+  try {
+    const { svg: basicSvg } = await mermaid.render('erd-basic-svg', basicERD);
+    document.getElementById('erd-basic').innerHTML = basicSvg;
+    
+    const { svg: granularSvg } = await mermaid.render('erd-granular-svg', granularERD);
+    document.getElementById('erd-granular').innerHTML = granularSvg;
+    
+    // Round corners and clean up styling
+    document.querySelectorAll('.erd-container svg.erDiagram .node').forEach(node => {
+      const firstPath = node.querySelector('path[d]');
+      if (!firstPath) return;
+      const d = firstPath.getAttribute('d');
+      const nums = d.match(/-?[\d.]+/g)?.map(Number);
+      if (!nums || nums.length < 8) return;
+      const xs = [nums[0], nums[2], nums[4], nums[6]];
+      const ys = [nums[1], nums[3], nums[5], nums[7]];
+      const x = Math.min(...xs), y = Math.min(...ys);
+      const w = Math.max(...xs) - x, h = Math.max(...ys) - y;
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('x', x); rect.setAttribute('y', y);
+      rect.setAttribute('width', w); rect.setAttribute('height', h);
+      rect.setAttribute('rx', '8');
+      for (const a of ['fill', 'stroke', 'stroke-width', 'class', 'style']) {
+        if (firstPath.hasAttribute(a)) rect.setAttribute(a, firstPath.getAttribute(a));
+      }
+      firstPath.replaceWith(rect);
+    });
+    
+    // Clean up row borders
+    document.querySelectorAll('.erd-container svg.erDiagram .row-rect-odd path, .erd-container svg.erDiagram .row-rect-even path').forEach(p => {
+      p.setAttribute('stroke', 'none');
+    });
+  } catch (error) {
+    console.error('Mermaid rendering error:', error);
+  }
+}
+
+renderERDs();
+</script>
+
+<script>
+function switchTab(index) {
+  // Update tab buttons
+  document.querySelectorAll('.tab').forEach((tab, i) => {
+    tab.classList.toggle('active', i === index);
+  });
+  
+  // Update tab content
+  document.querySelectorAll('.tab-content').forEach((content, i) => {
+    content.classList.toggle('active', i === index);
+  });
+}
+</script>
+
+</body>
+</html>

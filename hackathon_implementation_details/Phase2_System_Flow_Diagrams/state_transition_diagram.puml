@@ -1,0 +1,228 @@
+@startuml Ticket_State_Transition_Diagram
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam handwritten false
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam defaultFontStyle bold
+skinparam StateFontSize 14
+skinparam StateFontStyle bold
+skinparam StateAttributeFontSize 12
+skinparam StateAttributeFontStyle bold
+skinparam TitleFontSize 18
+skinparam TitleFontStyle bold
+skinparam ArrowThickness 2
+skinparam StateBorderThickness 2
+
+title Ticket Lifecycle - State Transition Diagram
+
+skinparam state {
+  BackgroundColor<<initial>> #e0e7ff
+  BorderColor<<initial>> #667eea
+  BackgroundColor<<processing>> #fef3c7
+  BorderColor<<processing>> #f59e0b
+  BackgroundColor<<routing>> #dbeafe
+  BorderColor<<routing>> #3b82f6
+  BackgroundColor<<active>> #d1fae5
+  BorderColor<<active>> #10b981
+  BackgroundColor<<final>> #e5e7eb
+  BorderColor<<final>> #6b7280
+  BackgroundColor<<error>> #fee2e2
+  BorderColor<<error>> #ef4444
+}
+
+[*] --> NEW : Ticket ingested\n(ITSM webhook or CSV)
+
+state "NEW" as NEW <<initial>>
+state "CLASSIFYING" as CLASSIFYING <<processing>>
+state "CLASSIFIED" as CLASSIFIED <<processing>>
+state "RETRIEVING" as RETRIEVING <<processing>>
+state "GENERATING" as GENERATING <<processing>>
+state "EVALUATING" as EVALUATING <<processing>>
+
+state "AUTO_RESOLVED" as AUTO_RESOLVED <<routing>>
+state "ASSIGNED" as ASSIGNED <<routing>>
+state "ESCALATED" as ESCALATED <<routing>>
+
+state "IN_PROGRESS" as IN_PROGRESS <<active>>
+state "REASSIGNED" as REASSIGNED <<active>>
+state "RESOLVED" as RESOLVED <<active>>
+
+state "CLOSED" as CLOSED <<final>>
+state "REOPENED" as REOPENED <<error>>
+
+' Initial processing flow
+NEW --> CLASSIFYING : Embedding task triggered\n(background job)
+note right of CLASSIFYING
+  **Duration:** < 200ms
+  **Actions:**
+  - Generate 384-dim embedding
+  - Fine-tuned model prediction
+end note
+
+CLASSIFYING --> CLASSIFIED : Category predicted\nconfidence calculated
+note right of CLASSIFIED
+  **Output:**
+  - category: String
+  - confidence: Float (0.0-1.0)
+  - is_multi_domain: Boolean
+end note
+
+CLASSIFIED --> RETRIEVING : RAG pipeline initiated
+note right of RETRIEVING
+  **Duration:** < 500ms
+  **Process:**
+  - Hybrid retrieval (Dense + BM25)
+  - MMR reranking (λ=0.7)
+end note
+
+RETRIEVING --> GENERATING : Similar tickets found\n(top-5 retrieved)
+note right of GENERATING
+  **Duration:** < 3 seconds
+  **LLM:** Mistral-7B-Instruct
+  **Output:** Resolution steps array
+end note
+
+GENERATING --> EVALUATING : Resolution created
+
+' Routing decision point
+note right of EVALUATING
+  **LLM-as-Judge Scoring:**
+  - Relevance: 1-5
+  - Completeness: 1-5
+  - Actionability: 1-5
+  **Duration:** < 1 second
+end note
+
+EVALUATING --> AUTO_RESOLVED : [confidence > 0.85]\n[avg_score >= 3.5]\n**UserProxy confirms**
+note on link
+  **Guard Conditions:**
+  - confidence_score > 0.85
+  - llm_avg_score >= 3.5
+  - user_confirmed == True
+  **Target:** ≥25% of tickets
+end note
+
+EVALUATING --> ASSIGNED : [0.60 <= confidence <= 0.85]
+note on link
+  **Guard Condition:**
+  - 0.60 <= confidence < 0.85
+  **Action:**
+  - Assign to L1/L2 department
+  - Provide suggested resolution
+  **Target:** 60-70% of tickets
+end note
+
+EVALUATING --> ESCALATED : [confidence < 0.60]\n[OR is_multi_domain == True]
+note on link
+  **Guard Conditions:**
+  - confidence_score < 0.60
+  - OR is_multi_domain flag set
+  **Action:**
+  - Route to L2/L3 specialist
+  - Include context package
+  **Target:** 5-15% of tickets
+  **Accuracy Target:** ≥90%
+end note
+
+' Auto-resolve path
+AUTO_RESOLVED --> CLOSED : Verified by system\nFeedback = accepted
+note on link
+  **Action:**
+  - Update KB if accepted
+  - Close ticket
+  - Notify ITSM
+end note
+
+AUTO_RESOLVED --> ASSIGNED : UserProxy rejects\nauto-resolution
+note on link
+  **Fallback:**
+  Route to L1 for manual review
+end note
+
+' Department route path
+ASSIGNED --> IN_PROGRESS : L1/L2 agent\naccepts ticket
+note on link
+  **Action:**
+  - Notify agent (Email + Slack)
+  - Start SLA timer
+end note
+
+' Escalation path
+ESCALATED --> IN_PROGRESS : L2/L3 specialist\naccepts ticket
+note on link
+  **Action:**
+  - Urgent notification
+  - Provide full context package
+end note
+
+' Active work states
+IN_PROGRESS --> RESOLVED : Agent provides\nsolution
+note on link
+  **Action:**
+  - Store resolution
+  - Request verification
+end note
+
+IN_PROGRESS --> REASSIGNED : Incorrect routing\ndetected
+note on link
+  **Trigger:**
+  - Agent identifies wrong department
+  - Multi-domain complexity discovered
+end note
+
+REASSIGNED --> ASSIGNED : Route to correct\ndepartment
+note on link
+  **Action:**
+  - Re-classify if needed
+  - Log routing error
+end note
+
+REASSIGNED --> ESCALATED : Needs specialist\nexpertise
+note on link
+  **Action:**
+  - Upgrade priority
+  - Assign to L2/L3
+end note
+
+' Resolution to closure
+RESOLVED --> CLOSED : Requester verifies\nsolution works
+note on link
+  **Action:**
+  - Request feedback
+  - Update knowledge base
+  - Close in ITSM
+end note
+
+' Rare edge case
+CLOSED --> REOPENED : User/agent reopens\n(solution failed)
+note on link
+  **Rare:** < 5% target
+  **Trigger:**
+  - Solution didn't work
+  - Issue recurred
+end note
+
+REOPENED --> IN_PROGRESS : Reassigned for\nrework
+note on link
+  **Action:**
+  - Escalate priority
+  - Assign to original agent
+end note
+
+' Final state
+CLOSED --> [*] : Ticket lifecycle\ncomplete
+
+note bottom
+  **State Metrics:**
+  - Total Resolution Time Target: < 2 hours (NEW → CLOSED)
+  - Auto-Resolve Accuracy: ≥ 95%
+  - Reopen Rate: < 5%
+  
+  **Logging:**
+  All transitions logged to routing_history table
+  for audit and performance analysis
+end note
+
+@enduml
