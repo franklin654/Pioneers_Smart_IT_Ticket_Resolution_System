@@ -1,9 +1,9 @@
-"""Routing accuracy evaluation using the 6StringNinja held-out test set.
+"""Routing accuracy evaluation using the synthetic held-out test set.
 
-Queries all tickets ingested via the ServiceNow test set loader
+Queries all tickets ingested via the held-out test set loader
 (``source = WEBHOOK``) that have been processed through the pipeline,
 then compares the classifier's ``predicted_category`` against the ground-truth
-``ticket.category`` (populated from the ``assignment_group`` field at load time).
+``ticket.category`` (populated at load time from the synthetic test CSV).
 
 Metrics:
     - **Overall accuracy** — fraction of classified test tickets where
@@ -105,8 +105,8 @@ async def _evaluate_and_return(fail_under: float, limit: int = 1000) -> RoutingA
 async def _evaluate(fail_under: float, limit: int) -> None:
     result = await _evaluate_and_return(fail_under=fail_under, limit=limit)
 
-    console.print("\n[bold cyan]Routing Accuracy Evaluation (ServiceNow Test Set)[/bold cyan]\n")
-    console.print(f"  Source:           [dim]{_TEST_SOURCE.value}[/dim] (6StringNinja held-out)")
+    console.print("\n[bold cyan]Routing Accuracy Evaluation (Synthetic Test Set)[/bold cyan]\n")
+    console.print(f"  Source:           [dim]{_TEST_SOURCE.value}[/dim] (synthetic held-out)")
     console.print(f"  Test set size:    {result.test_set_size}")
     console.print(
         f"  Classified:       {result.classified_count} "
@@ -150,9 +150,9 @@ async def _evaluate(fail_under: float, limit: int) -> None:
     if denominator == 0:
         console.print(
             "\n[bold red]❌ SKIP — no classified test-set tickets found.[/bold red]"
-            "\n  Run the pipeline against the ServiceNow test set first:"
+            "\n  Run the pipeline against the synthetic test set first:"
             "\n  1. python -m scripts.load_tickets --input-path data/raw/synthetic_test.csv --ticket-source webhook"
-            "\n  2. Process tickets through the API or batch script"
+            "\n  2. python -m scripts.batch_classify_webhook"
         )
         sys.exit(1)
 
@@ -180,7 +180,7 @@ def main(
         help="Maximum number of test-set tickets to evaluate.",
     ),
 ) -> None:
-    """Evaluate routing accuracy against the held-out ServiceNow test set."""
+    """Evaluate routing accuracy against the held-out synthetic test set."""
     asyncio.run(_evaluate(fail_under=fail_under, limit=limit))
 
 

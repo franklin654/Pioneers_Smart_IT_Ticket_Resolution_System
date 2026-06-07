@@ -27,7 +27,7 @@ import uuid
 import pytest
 import pytest_asyncio
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from src.db.models import (
     Base,
@@ -82,15 +82,20 @@ async def test_engine():
 async def db_session(test_engine) -> AsyncSession:
     """Yield a session that rolls back all changes after each test.
 
-    Uses a nested transaction (savepoint) so each test starts with the
-    same database state as defined by the session-scoped schema creation.
+    Opens a dedicated connection, begins an outer transaction, and binds
+    the session to that connection.  The outer transaction is rolled back
+    (never committed) after the test, leaving the schema intact for the
+    next test.  No savepoints are used so SQLAlchemy's internal flush
+    savepoints don't conflict with the teardown rollback.
     """
-    session_factory = async_sessionmaker(test_engine, expire_on_commit=False)
-
-    async with session_factory() as session:
-        async with session.begin():
+    async with test_engine.connect() as conn:
+        trans = await conn.begin()
+        session = AsyncSession(bind=conn, expire_on_commit=False)
+        try:
             yield session
-            await session.rollback()
+        finally:
+            await session.close()
+            await trans.rollback()
 
 
 # ── Model factories ───────────────────────────────────────────────────────────

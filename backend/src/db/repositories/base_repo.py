@@ -79,7 +79,7 @@ class BaseRepository(Generic[ModelT]):
         obj = await self.get_by_id(record_id)
         if obj is None:
             return False
-        self.session.delete(obj)
+        await self.session.delete(obj)
         await self.session.flush()
         return True
 

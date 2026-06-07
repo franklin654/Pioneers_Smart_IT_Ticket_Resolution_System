@@ -33,7 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import get_settings
 from src.core.logging import get_logger
-from src.db.database import get_async_session
+from src.db.database import AsyncSessionLocal
 from src.db.repositories.knowledge_base_repo import KnowledgeBaseRepository
 from src.embedding.generator import EmbeddingGenerator
 from src.rag.knowledge_base import KnowledgeBase
@@ -238,12 +238,10 @@ async def main() -> int:
         fail_under_mrr=args.fail_under_mrr,
     )
 
-    async for session in get_async_session():
+    async with AsyncSessionLocal() as session:
         result = await evaluate(session, config)
         print_report(result, config)
         return 0 if result.passed else 1
-
-    return 1
 
 
 if __name__ == "__main__":

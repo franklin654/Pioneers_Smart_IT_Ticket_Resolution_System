@@ -145,8 +145,14 @@ class TestPIIHandling:
         assert ticket.original_description == raw
 
     async def test_result_pii_detected_false_for_clean_text(self, db_session):
+        # Use text with no names, IPs, emails, or phone numbers so Presidio
+        # does not produce a false positive.
+        clean_text = (
+            "The label printer in the supply room on floor 2 stopped responding. "
+            "The print queue shows error code 0x00000001 after the last restart."
+        )
         pipeline = build_ingestion_pipeline(db_session)
-        result = await pipeline.run(_make_request())
+        result = await pipeline.run(_make_request(description=clean_text))
         assert result.pii_detected is False
 
 
@@ -212,28 +218,34 @@ class TestExactDuplicateDetection:
 
 class TestValidationFailures:
     async def test_short_title_raises_validation_error(self, db_session):
-        pipeline = build_ingestion_pipeline(db_session)
-        with pytest.raises(ValidationError) as exc_info:
-            await pipeline.run(_make_request(title="ab"))
-        assert exc_info.value.detail["field"] == "title"
+        # Pydantic enforces min-length at schema construction time, not inside
+        # pipeline.run(), so we test the schema layer directly.
+        from pydantic import ValidationError as PydanticValidationError
+
+        with pytest.raises(PydanticValidationError) as exc_info:
+            _make_request(title="ab")
+        errors = exc_info.value.errors()
+        assert any(e["loc"] == ("title",) for e in errors)
 
     async def test_short_title_creates_no_db_row(self, db_session):
-        pipeline = build_ingestion_pipeline(db_session)
-        repo = TicketRepository(db_session)
+        from pydantic import ValidationError as PydanticValidationError
 
+        repo = TicketRepository(db_session)
         before_count = (await repo.list())[1]
         try:
-            await pipeline.run(_make_request(title="x"))
-        except ValidationError:
+            _make_request(title="x")
+        except PydanticValidationError:
             pass
         after_count = (await repo.list())[1]
         assert after_count == before_count
 
     async def test_long_description_raises_validation_error(self, db_session):
-        pipeline = build_ingestion_pipeline(db_session)
-        with pytest.raises(ValidationError) as exc_info:
-            await pipeline.run(_make_request(description="x" * 5001))
-        assert exc_info.value.detail["field"] == "description"
+        from pydantic import ValidationError as PydanticValidationError
+
+        with pytest.raises(PydanticValidationError) as exc_info:
+            _make_request(description="x" * 5001)
+        errors = exc_info.value.errors()
+        assert any(e["loc"] == ("description",) for e in errors)
 
     async def test_invalid_priority_raises_validation_error(self, db_session):
         """Priority 0 is invalid; Pydantic catches this before the pipeline runs."""

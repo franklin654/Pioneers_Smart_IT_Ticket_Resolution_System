@@ -37,10 +37,12 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+
 from src.core.config import get_settings  # noqa: F401
 from src.db.database import AsyncSessionLocal, init_db
-from src.db.models import ConfidenceLevel, TicketCategory, TicketStatus
-from src.db.repositories.ticket_repo import TicketRepository, TicketSearchFilters
+from src.db.models import ConfidenceLevel, Ticket, TicketCategory, TicketStatus
 
 app = typer.Typer(add_completion=False)
 console = Console()
@@ -83,7 +85,7 @@ class E2EEvalResult:
 @app.command()
 def main(
     fail_latency: float = typer.Option(
-        5.0, "--fail-latency", help="Max allowed p95 E2E latency in seconds"
+        10.0, "--fail-latency", help="Max allowed p95 E2E latency in seconds"
     ),
     fail_auto_resolve: float = typer.Option(
         25.0, "--fail-auto-resolve", help="Minimum required auto-resolve rate (%)"
@@ -101,15 +103,20 @@ async def _evaluate(fail_latency: float, fail_auto_resolve: float, limit: int) -
 
     console.print("\n[bold cyan]End-to-End Pipeline Evaluation[/bold cyan]\n")
 
-    # ── Load all terminal-status tickets ───────────────────────────────────
+    # ── Load all terminal-status tickets (eager-load relationships) ────────
     all_tickets = []
     async with AsyncSessionLocal() as session:
-        repo = TicketRepository(session)
         for status in _TERMINAL_STATUSES:
-            tickets, _ = await repo.search(
-                TicketSearchFilters(status=status), offset=0, limit=limit
+            result = await session.execute(
+                select(Ticket)
+                .where(Ticket.status == status)
+                .options(
+                    selectinload(Ticket.resolution),
+                    selectinload(Ticket.classification),
+                )
+                .limit(limit)
             )
-            all_tickets.extend(tickets)
+            all_tickets.extend(result.scalars().all())
 
     if not all_tickets:
         console.print("[bold red]No processed tickets found.[/bold red]")

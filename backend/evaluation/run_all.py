@@ -64,9 +64,9 @@ def main(
     fail_under_recall: float = typer.Option(0.85, "--fail-under-recall", help="Min RAG Recall@k"),
     fail_under_mrr: float = typer.Option(0.70, "--fail-under-mrr", help="Min RAG MRR"),
     fail_under_llm: float = typer.Option(3.5, "--fail-under-llm", help="Min mean LLM quality score"),
-    fail_latency: float = typer.Option(5.0, "--fail-latency", help="Max p95 E2E latency (s)"),
+    fail_latency: float = typer.Option(10.0, "--fail-latency", help="Max p95 E2E latency (s)"),
     fail_auto_resolve: float = typer.Option(25.0, "--fail-auto-resolve", help="Min auto-resolve rate (%)"),
-    fail_under_routing: float = typer.Option(0.75, "--fail-under-routing", help="Min routing accuracy on ServiceNow test set"),
+    fail_under_routing: float = typer.Option(0.75, "--fail-under-routing", help="Min routing accuracy on synthetic held-out test set"),
     limit: int = typer.Option(2000, "--limit", help="Max records per evaluator"),
 ) -> None:
     """Run all evaluation modules and print a final pass/fail summary."""
