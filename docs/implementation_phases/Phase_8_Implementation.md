@@ -175,10 +175,13 @@ All new evaluators match the `classification_eval.py` pattern:
 ### Prerequisites
 
 ```bash
-cd app_v2/backend
+cd backend
 
-# 1. Populate the database with Kaggle data
-mamba run -n ticket_routing python -m scripts.load_kaggle_data --input-path data/raw/tickets.csv
+# 1. Generate and load synthetic training data
+mamba run -n ticket_routing python -m scripts.generate_synthetic_data \
+  --mode train --count 1200 --output data/raw/synthetic_train.csv
+mamba run -n ticket_routing python -m scripts.load_tickets \
+  --input-path data/raw/synthetic_train.csv --source synthetic_train
 
 # 2. Train the classifier
 mamba run -n ticket_routing python -m scripts.train_classifier

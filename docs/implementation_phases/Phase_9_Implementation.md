@@ -221,7 +221,7 @@ curl -s http://localhost:8000/metrics | grep tickets_ingested_total
 | --- | --- | --- |
 | 1 — Scaffolding | ✅ | DB models, repos, schemas, Docker |
 | 2 — Ingestion | ✅ | Validator, PII masker, deduplicator |
-| 3 — Classification | ✅ | Embeddings, LogisticRegression classifier |
+| 3 — Classification | ✅ | Embeddings, LinearSVC (calibrated) classifier |
 | 4 — RAG | ✅ | Hybrid retriever, MMR reranker, LLM generator |
 | 5 — Agents | ✅ | AutoGen orchestrator, 4 agents, routing |
 | 6 — API | ✅ | FastAPI REST + WebSocket, JWT auth |

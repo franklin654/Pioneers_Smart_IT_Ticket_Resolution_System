@@ -1,4 +1,4 @@
-"""AutoGen agent wrapping the logistic-regression TicketClassifier.
+"""AutoGen agent wrapping the LinearSVC-backed TicketClassifier.
 
 Receives a CLASSIFY message dict, calls the classifier, persists the
 Classification row, updates ticket status, and returns a structured
@@ -30,7 +30,7 @@ logger = get_logger(__name__)
 
 
 class ClassifierAgent(autogen.ConversableAgent):
-    """AutoGen agent that classifies tickets via a trained Logistic Regression.
+    """AutoGen agent that classifies tickets via a trained LinearSVC (calibrated).
 
     Wraps :class:`~src.classification.classifier.TicketClassifier` and persists
     results to the ``classifications`` table.  Status transitions:

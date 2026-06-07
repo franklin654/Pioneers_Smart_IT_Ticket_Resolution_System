@@ -1,4 +1,4 @@
-"""Real-time ticket classifier backed by a pre-trained Logistic Regression.
+"""Real-time ticket classifier backed by a pre-trained LinearSVC (calibrated).
 
 Loads a serialized ``TrainedModelArtifact`` produced by ``ClassifierTrainer``
 and performs low-latency inference (target < 22ms).  Thread-safe for
@@ -36,11 +36,11 @@ class TrainedModelArtifact:
 
     Attributes:
         pipeline: Fitted sklearn ``Pipeline`` containing the
-            ``LogisticRegression`` estimator.
+            ``CalibratedClassifierCV(LinearSVC)`` estimator.
         label_encoder: Fitted ``LabelEncoder`` mapping integer class indices
             to :class:`~src.db.models.TicketCategory` string values.
         model_version: Unique identifier for this training run,
-            e.g. ``"logistic_regression_v20260602_143012"``.
+            e.g. ``"linearsvc_v20260602_143012"``.
         trained_at: ISO-8601 UTC timestamp of when training completed.
         training_samples: Number of examples the model was trained on.
         categories: Ordered list of category values matching the label encoder
@@ -56,7 +56,7 @@ class TrainedModelArtifact:
 
 
 class TicketClassifier:
-    """Classifies tickets using a pre-trained Logistic Regression model.
+    """Classifies tickets using a pre-trained LinearSVC (calibrated) model.
 
     The embedding generation and classification are two separate steps:
         1. ``EmbeddingGenerator.encode_single(text)`` → 384-dim vector

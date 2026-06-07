@@ -1,119 +1,109 @@
-# Phase 10 — Extended Training & Evaluation Data Sources (Completed)
+# Phase 10 — Synthetic Data Pipeline & 5th Evaluator (Completed)
 
-**Project root:** `app_v2/backend/`
+**Project root:** `backend/`
 **Status:** Complete — all Python files syntax-verified
 
 ---
 
 ## What Was Built
 
-Phase 10 extends the data pipeline to support five high-value external datasets identified in the v3.0 data sources specification, and adds a 5th evaluation metric (routing accuracy) backed by a held-out ServiceNow test set.
+Phase 10 replaces the external dataset dependency with a fully synthetic data pipeline and adds a 5th evaluation metric (routing accuracy) backed by a held-out synthetic test set.
 
-**Classifier training data:** ~10K → ~115K tickets  
-**RAG knowledge base:** ~9K → ~82K+ entries  
+**Approach:** Claude API generates all training and evaluation data. No Kaggle downloads or third-party datasets required.
+
+**Training data:** ~1,200 synthetic tickets (200 per category) with resolutions → also populates `knowledge_base_entries`  
+**Held-out test set:** ~300 harder synthetic tickets (50 per category) without resolutions → `TicketSource.WEBHOOK`  
 **Evaluation suite:** 4 evaluators → 5 evaluators
 
 ---
 
-## Files Created / Modified
+## Files Modified / Created / Deleted
 
 ```text
 MODIFIED:
-  pyproject.toml                                  — added pyarrow>=14.0
-  scripts/load_kaggle_data.py                     — Parquet support, language filter,
-                                                    new column aliases, extended
-                                                    CATEGORY_MAPPING, --source flag
+  scripts/load_tickets.py                         — renamed from load_kaggle_data.py;
+                                                    rewritten for synthetic CSV format;
+                                                    --ticket-source webhook support
   src/db/repositories/ticket_repo.py              — added get_by_source() method
   evaluation/run_all.py                           — 5th runner, --fail-under-routing flag
 
 CREATED:
-  scripts/load_uci_incidents.py                   — UCI 36-column specialist loader
-  scripts/load_servicenow_test_set.py             — 6StringNinja held-out test set loader
   evaluation/routing_accuracy_eval.py             — 5th evaluator (routing accuracy)
+
+DELETED:
+  scripts/load_uci_incidents.py                   — UCI dataset not used
+  scripts/load_servicenow_test_set.py             — ServiceNow Parquet not used
 ```
 
 ---
 
-## 1. `load_kaggle_data.py` Extensions
+## 1. `generate_synthetic_data.py` — Two Generation Modes
 
-### Parquet auto-detection
+### `--mode train` (standard scenarios)
 
-File format is detected by extension:
-
-```python
-if input_path.suffix.lower() in (".parquet", ".pq"):
-    df = pd.read_parquet(input_path)   # requires pyarrow>=14.0
-else:
-    df = pd.read_csv(input_path)
-```
-
-### `--language` filter
-
-Drops non-English rows before loading. No-op if no language column is found:
+Uses `CATEGORY_SCENARIOS` — realistic enterprise IT issues appropriate for training.  
+Outputs columns: `title`, `description`, `category`, `resolution`, `priority`.
 
 ```bash
-python -m scripts.load_kaggle_data \
-  --input-path data/raw/multilingual.csv \
-  --language en --source multilingual
+python -m scripts.generate_synthetic_data \
+  --mode train --count 1200 --output data/raw/synthetic_train.csv
 ```
 
-### New column aliases
+200 tickets per category (1,200 total). The `resolution` column is what populates `knowledge_base_entries` when loaded.
 
-| Slot | New candidates |
+### `--mode test` (harder held-out scenarios)
+
+Uses `TEST_CATEGORY_SCENARIOS` — harder, more specific edge cases:
+
+| Category | Example scenarios |
 |---|---|
-| title | `short_description`, `instruction` |
-| description | `body`, `content` |
-| category | `queue`, `assignment_group`, `type` |
-| resolution | `response` |
+| INFRASTRUCTURE | NTP clock drift causing Kerberos failures, iSCSI target disconnects, NUMA imbalance |
+| APPLICATION | OAuth token silent expiry, race conditions under load, locale/encoding bugs |
+| SECURITY | Lateral movement in SIEM, expired internal root CA cascade, insider threat indicators |
+| DATABASE | Autovacuum bloat, logical replication slot WAL exhaustion, stale statistics causing bad query plans |
+| ACCESS_MANAGEMENT | Hardcoded credentials in CI/CD, orphaned departed-employee accounts, PAM module lockout |
+| NETWORK | Asymmetric routing TCP resets, MTU mismatch silent loss, BGP route flapping |
 
-### Extended `CATEGORY_MAPPING`
-
-Added 13 new label variants covering Bitext (`technical support`, `account access`), Multilingual (`it support`, `network operations`, `information security`, `helpdesk`, `dba`), and ServiceNow schema (`incident`, `systems`).
-
-### `--source` flag
-
-Tags `KnowledgeBaseEntry.source` for traceability across datasets.
-
----
-
-## 2. `load_uci_incidents.py` — UCI Specialist Loader
-
-Handles the UCI Incident Management dataset's 36-column schema:
-
-| Step | Action |
-|---|---|
-| Filter | `incident_state = 'Closed'` only |
-| Deduplicate | One row per `sys_id` (most recent event) |
-| Priority | `min(urgency, impact)` mapped from 1–3 to 1–5 scale |
-| Category | `category` → `subcategory` fallback via `CATEGORY_MAPPING` |
-| Resolution | `close_notes` field → `KnowledgeBaseEntry` |
-| Source tag | `"uci"` on all KB entries |
-
-Expected output: ~22K unique incidents, ~15K KB entries (where `close_notes` is non-null).
+Outputs columns: `title`, `description`, `category`, `priority` (no `resolution`).
 
 ```bash
-python -m scripts.load_uci_incidents --input-path data/raw/uci_incidents.csv
+python -m scripts.generate_synthetic_data \
+  --mode test --count 300 --output data/raw/synthetic_test.csv
 ```
 
 ---
 
-## 3. `load_servicenow_test_set.py` — Held-Out Test Set Loader
+## 2. `load_tickets.py` — Training vs Test-Set Loading
 
-Loads the 500-row 6StringNinja dataset as a **held-out evaluation set only**.
+The script auto-detects whether to create KB entries based on whether a `resolution` column is present in the CSV.
 
-Key constraints enforced by the script:
-- Tickets use `TicketSource.WEBHOOK` (distinct from training CSV data)
-- No rows are inserted into `knowledge_base_entries`
-- `ticket.category` is populated from `assignment_group` (ground truth for the evaluator)
-- Status is set to `CLOSED`
+### Training data (inserts tickets + KB entries)
 
 ```bash
-python -m scripts.load_servicenow_test_set --input-path data/raw/servicenow_test.parquet
+python -m scripts.load_tickets \
+  --input-path data/raw/synthetic_train.csv \
+  --source synthetic_train
 ```
+
+- `ticket.source = TicketSource.CSV`
+- `KnowledgeBaseEntry` rows created for every row with a non-null resolution
+
+### Held-out test set (inserts tickets only)
+
+```bash
+python -m scripts.load_tickets \
+  --input-path data/raw/synthetic_test.csv \
+  --ticket-source webhook \
+  --source synthetic_test
+```
+
+- `ticket.source = TicketSource.WEBHOOK` — isolated from training data
+- No `KnowledgeBaseEntry` rows (no resolution column in test CSV)
+- `routing_accuracy_eval.py` queries by `TicketSource.WEBHOOK` to find these tickets
 
 ---
 
-## 4. `ticket_repo.get_by_source()` — New Repo Method
+## 3. `ticket_repo.get_by_source()` — New Repo Method
 
 ```python
 async def get_by_source(self, source: TicketSource, limit: int = 1000) -> list[Ticket]:
@@ -123,9 +113,9 @@ Queries tickets by `TicketSource` enum with `classification` eager-loaded. Used 
 
 ---
 
-## 5. `routing_accuracy_eval.py` — 5th Evaluator
+## 4. `routing_accuracy_eval.py` — 5th Evaluator
 
-Compares the classifier's `predicted_category` against the ground-truth `ticket.category` for the held-out ServiceNow test set.
+Compares the classifier's `predicted_category` against the ground-truth `ticket.category` for the held-out test set.
 
 | Metric | Description |
 |---|---|
@@ -141,19 +131,20 @@ python -m evaluation.routing_accuracy_eval --fail-under 0.75
 
 Example output:
 ```
-Routing Accuracy Evaluation (ServiceNow Test Set)
-  Test set size:     500
-  Classified:        487 (97.4%)
-  With ground truth: 451
-  Correct routing:   361 / 451
-  Overall accuracy:  0.800
+Routing Accuracy Evaluation (Synthetic Test Set)
+  Source:           webhook
+  Test set size:    300
+  Classified:       293 (97.7%)
+  With ground truth:293
+  Correct routing:  235 / 293
+  Overall accuracy: 0.802
 
-Gate (accuracy ≥ 0.75): ✅ PASS  0.800
+Gate (accuracy ≥ 0.75): ✅ PASS  0.802
 ```
 
 ---
 
-## 6. `run_all.py` — 5th Evaluator Wired In
+## 5. `run_all.py` — 5th Evaluator Wired In
 
 Added `_run_routing_accuracy()` runner and `--fail-under-routing` CLI option. Section header updated from `4 / 4` to `5 / 5`.
 
@@ -170,42 +161,38 @@ python -m evaluation.run_all \
   --fail-under-routing 0.75
 ```
 
-Final summary table now shows 5 rows:
+Final summary table shows 5 rows:
 
 | Module | Status | Metric | Achieved | Target |
 |---|---|---|---|---|
-| Classification | ✅ PASS | Macro F1 | 0.9234 | ≥ 0.92 |
-| RAG Retrieval | ✅ PASS | Precision@5 | 0.850 | ≥ 0.80 |
-| LLM Quality | ✅ PASS | Mean Score | 4.1/5 | ≥ 3.5 |
-| End-to-End | ✅ PASS | p95 Latency | 2.34s | < 5.0s |
-| Routing Accuracy | ✅ PASS | Accuracy | 0.803 | ≥ 0.75 |
+| Classification | ✅ PASS | Macro F1 | 0.92+ | ≥ 0.92 |
+| RAG Retrieval | ✅ PASS | Precision@5 | 0.85+ | ≥ 0.80 |
+| LLM Quality | ✅ PASS | Mean Score | 4.0+/5 | ≥ 3.5 |
+| End-to-End | ✅ PASS | p95 Latency | <5s | < 5.0s |
+| Routing Accuracy | ✅ PASS | Accuracy | 0.80+ | ≥ 0.75 |
 
 ---
 
-## 7. Data Source → Loader Mapping
+## 6. Data Source → Loader Mapping
 
-| Dataset | Format | Loader | Key flags |
-|---|---|---|---|
-| Kaggle Automatic Ticket (78K) | CSV | `load_kaggle_data.py` | `--source kaggle_automatic` |
-| Kaggle IT Service Ticket (5K) | CSV | `load_kaggle_data.py` | `--source kaggle_it_service` |
-| Kaggle Multilingual EN (~10K) | CSV | `load_kaggle_data.py` | `--language en --source multilingual` |
-| Bitext HuggingFace (26K) | Parquet | `load_kaggle_data.py` | `--source huggingface_bitext` |
-| UCI Incident Log (24K) | CSV | `load_uci_incidents.py` | — |
-| 6StringNinja test set (500) | Parquet | `load_servicenow_test_set.py` | — (held-out) |
+| Data | Generator flags | Loader flags |
+|---|---|---|
+| Training tickets + KB entries | `--mode train --count 1200` | `--source synthetic_train` |
+| Held-out test set | `--mode test --count 300` | `--ticket-source webhook --source synthetic_test` |
 
 ---
 
-## 8. All Phases Complete
+## 7. All Phases Complete
 
 | Phase | Status | What |
 |---|---|---|
 | 1 — Scaffolding | ✅ | DB models, repos, schemas, Docker |
 | 2 — Ingestion | ✅ | Validator, PII masker, deduplicator |
-| 3 — Classification | ✅ | Embeddings, LogisticRegression classifier |
+| 3 — Classification | ✅ | Embeddings, LinearSVC (calibrated) classifier |
 | 4 — RAG | ✅ | Hybrid retriever, MMR reranker, LLM generator |
 | 5 — Agents | ✅ | AutoGen orchestrator, 4 agents, routing |
 | 6 — API | ✅ | FastAPI REST + WebSocket, JWT auth |
 | 7 — Frontend | ✅ | Angular 20 SPA with Material UI |
 | 8 — Evaluation | ✅ | 4 evaluators + unified runner |
 | 9 — Docker & Monitoring | ✅ | Prometheus metrics, Grafana dashboards, health checks |
-| 10 — Extended Data Sources | ✅ | Multi-format loaders, 115K training tickets, 5th evaluator |
+| 10 — Synthetic Data Pipeline | ✅ | Claude-generated training + test data, 5th evaluator |

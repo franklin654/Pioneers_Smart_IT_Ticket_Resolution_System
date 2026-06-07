@@ -28,7 +28,7 @@ Ticket In
     ▼
 [Embedding Generator] ← sentence-transformers/all-MiniLM-L6-v2
     │
-    ├──► [Classifier]  ← Logistic Regression on embeddings
+    ├──► [Classifier]  ← LinearSVC (calibrated) on embeddings
     │         │
     │         ▼
     │    [Confidence Scorer]
@@ -74,7 +74,7 @@ AUTO_RESOLVE   ASSIGNED   ESCALATED
 | ORM | SQLAlchemy 2.0 (async) |
 | Database | PostgreSQL 16 + pgvector |
 | Embedding | sentence-transformers/all-MiniLM-L6-v2 (384-dim) |
-| Classifier | scikit-learn LogisticRegression |
+| Classifier | scikit-learn LinearSVC + CalibratedClassifierCV |
 | BM25 | rank-bm25 |
 | LLM | Ollama (Mistral-7B) / Claude API — env-controlled |
 | Agents | AutoGen (pyautogen) GroupChat |
@@ -98,14 +98,14 @@ app_v2/
 │   │   ├── schemas/        # Pydantic v2 request/response schemas
 │   │   ├── ingestion/      # validator, PII masker, deduplicator, pipeline
 │   │   ├── embedding/      # sentence-transformers generator, pgvector store
-│   │   ├── classification/ # Logistic Regression classifier, trainer, confidence
+│   │   ├── classification/ # LinearSVC classifier, trainer, confidence
 │   │   ├── rag/            # hybrid retriever, MMR reranker, LLM generator, KB
 │   │   ├── agents/         # AutoGen orchestrator + 4 agents
 │   │   ├── routing/        # routing decision engine, escalation logic
 │   │   ├── api/            # FastAPI routes, middleware, WebSocket
 │   │   └── monitoring/     # Prometheus metrics, health checks
-│   ├── scripts/            # setup_db, load_kaggle_data, train_classifier, etc.
-│   ├── data/               # raw/ (Kaggle CSVs), processed/, models/
+│   ├── scripts/            # setup_db, generate_synthetic_data, load_tickets, train_classifier, etc.
+│   ├── data/               # raw/ (synthetic CSVs), processed/, models/
 │   ├── tests/              # unit/, integration/, conftest.py
 │   ├── evaluation/         # classification_eval, rag_eval, llm_judge, e2e_eval
 │   ├── pyproject.toml
@@ -145,8 +145,8 @@ app_v2/
 - `db/repositories/` — generic BaseRepository + 4 domain repositories
 - `schemas/` — Pydantic v2 request/response schemas
 - `scripts/setup_db.py` — idempotent DB init + pgvector + IVFFlat indexes
-- `scripts/load_kaggle_data.py` — Kaggle CSV → DB ETL
-- `scripts/generate_synthetic_data.py` — Claude API generator (prepared, not run)
+- `scripts/generate_synthetic_data.py` — Claude API synthetic ticket generator (train + test modes)
+- `scripts/load_tickets.py` — synthetic CSV → DB loader (supports training and held-out test set)
 - `docker/docker-compose.yml` — full service stack
 - `.env.example`
 - Unit + integration tests for all of the above
@@ -175,7 +175,7 @@ app_v2/
 
 - `embedding/generator.py` — sentence-transformers inference (<50ms)
 - `embedding/store.py` — pgvector upsert + ANN similarity search
-- `classification/trainer.py` — LogisticRegression training pipeline
+- `classification/trainer.py` — LinearSVC training pipeline
 - `classification/classifier.py` — inference + top-3 probabilities (<22ms)
 - `classification/confidence.py` — HIGH/MEDIUM/LOW levels + multi-domain detection
 - `scripts/train_classifier.py` — end-to-end training run
@@ -276,7 +276,7 @@ app_v2/
 | Decision | Choice | Rationale |
 |---|---|---|
 | Vector store | PostgreSQL + pgvector | No extra service; native joins with ticket data |
-| Classifier | Logistic Regression on embeddings | <5ms inference, interpretable, proven F1 ≥ 0.92 |
+| Classifier | LinearSVC + CalibratedClassifierCV on embeddings | <5ms inference, strong F1 ≥ 0.92, `predict_proba` via calibration |
 | Retrieval | Hybrid 70% dense + 30% BM25 | +7% precision gain vs dense-only (from ablation) |
 | LLM backend | Env-controlled (`LLM_BACKEND`) | Offline (Ollama) for demo; Claude API as fallback |
 | Auth | JWT HS256 | Stateless, RBAC-compatible, no session store |

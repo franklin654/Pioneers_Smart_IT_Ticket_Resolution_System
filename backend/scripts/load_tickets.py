@@ -1,29 +1,31 @@
-"""Load IT support ticket files (CSV or Parquet) into the database.
+"""Load synthetic IT support ticket CSV files into the database.
 
-Handles column-name variation across different datasets by using heuristic
-column detection.  Maps free-text category labels to the six canonical
-:class:`~src.db.models.TicketCategory` enum values.
+Reads the CSV files produced by ``scripts/generate_synthetic_data.py`` and
+inserts them into the ``tickets`` and ``knowledge_base_entries`` tables.
 
-Supported datasets (tested):
-    - IT Support Ticket Dataset (CSV)
-    - Customer Support Ticket Dataset (CSV / JSON)
-    - Automatic Ticket Classification (CSV)
-    - IT Service Ticket Classification (CSV)
-    - Multilingual Customer Support Tickets (CSV)  — use ``--language en``
-    - Bitext LLM Training Dataset (Parquet)         — auto-detected by extension
+Two modes (matching the generator's ``--mode`` flag):
 
-Usage::
+    **Training data** (``--mode train`` output) — has ``resolution`` column.
+    Rows are inserted as ``TicketSource.CSV`` tickets and also into
+    ``knowledge_base_entries`` so the RAG retriever can use them.
 
-    # Standard Kaggle CSV
-    python -m scripts.load_kaggle_data --input-path data/raw/tickets.csv
+    **Held-out test data** (``--mode test`` output) — no ``resolution`` column.
+    Pass ``--ticket-source webhook`` so the routing accuracy evaluator can
+    query this set separately from training tickets.  No KB entries are created
+    (no resolution column → nothing to index).
 
-    # Parquet (HuggingFace Bitext)
-    python -m scripts.load_kaggle_data --input-path data/raw/bitext.parquet \\
-        --source huggingface_bitext
+Typical usage::
 
-    # Multilingual dataset — filter to English only
-    python -m scripts.load_kaggle_data --input-path data/raw/multilingual.csv \\
-        --language en --source multilingual
+    # Load training data
+    python -m scripts.load_tickets \\
+        --input-path data/raw/synthetic_train.csv \\
+        --source synthetic_train
+
+    # Load held-out test set
+    python -m scripts.load_tickets \\
+        --input-path data/raw/synthetic_test.csv \\
+        --ticket-source webhook \\
+        --source synthetic_test
 
 Environment:
     DATABASE_URL: Required.  Loaded from .env or the process environment.
@@ -50,8 +52,9 @@ from src.db.models import (
 logger = get_logger(__name__)
 app = typer.Typer(add_completion=False)
 
-# Maps known category label variants to canonical TicketCategory values.
-# Keys are lowercased and stripped before lookup.
+# Maps category label variants to canonical TicketCategory values.
+# Synthetic CSVs use exact enum values, so the top entries always match.
+# The synonyms below are kept for any future ad-hoc data loads.
 CATEGORY_MAPPING: dict[str, TicketCategory] = {
     # ── Infrastructure ────────────────────────────────────────────────────────
     "infrastructure": TicketCategory.INFRASTRUCTURE,
@@ -91,6 +94,7 @@ CATEGORY_MAPPING: dict[str, TicketCategory] = {
     # ── Access Management ─────────────────────────────────────────────────────
     "access": TicketCategory.ACCESS_MANAGEMENT,
     "access management": TicketCategory.ACCESS_MANAGEMENT,
+    "access_management": TicketCategory.ACCESS_MANAGEMENT,
     "account": TicketCategory.ACCESS_MANAGEMENT,
     "account access": TicketCategory.ACCESS_MANAGEMENT,
     "account_access": TicketCategory.ACCESS_MANAGEMENT,
@@ -120,7 +124,7 @@ def _detect_column(candidates: list[str], df_columns: list[str]) -> str | None:
 
 
 def _map_category(raw: str) -> TicketCategory | None:
-    """Map a free-text category label to a TicketCategory enum value."""
+    """Map a category label to a TicketCategory enum value."""
     return CATEGORY_MAPPING.get(str(raw).strip().lower())
 
 
@@ -132,46 +136,47 @@ def _compute_hash(title: str, description: str) -> str:
 
 @app.command()
 def main(
-    input_path: Path = typer.Option(..., "--input-path", "-i", help="Path to CSV, JSON, or Parquet file"),
+    input_path: Path = typer.Option(..., "--input-path", "-i", help="Path to CSV file"),
     batch_size: int = typer.Option(100, "--batch-size", "-b", help="DB insertion batch size"),
-    language: str | None = typer.Option(
-        None, "--language", "-l",
-        help="Keep only rows matching this language code (e.g. 'en'). No-op if no language column found.",
-    ),
     source: str = typer.Option(
-        "kaggle", "--source", "-s",
-        help="Source tag written to KnowledgeBaseEntry.source (e.g. 'kaggle', 'huggingface_bitext', 'multilingual').",
+        "synthetic",
+        "--source",
+        "-s",
+        help="Source tag written to KnowledgeBaseEntry.source for traceability.",
     ),
     categories: str = typer.Option(
         "",
         "--categories",
-        help="Comma-separated canonical categories to include (e.g. 'infrastructure,access_management'). "
+        help="Comma-separated canonical categories to include (e.g. 'infrastructure,security'). "
              "Default: all mapped categories.",
     ),
     max_per_category: int = typer.Option(
         0,
         "--max-per-category",
-        help="Cap the number of inserted tickets per category. 0 = unlimited.",
+        help="Cap inserted tickets per category. 0 = unlimited.",
     ),
     ticket_source: str = typer.Option(
         "csv",
         "--ticket-source",
-        help="TicketSource enum value for inserted tickets: 'csv' (default) or 'webhook' (held-out test set).",
+        help=(
+            "TicketSource for inserted tickets: "
+            "'csv' (training data, default) or "
+            "'webhook' (held-out test set — isolated from training by routing_accuracy_eval.py)."
+        ),
     ),
 ) -> None:
-    """Load ticket data (CSV or Parquet) into the database."""
+    """Load a synthetic ticket CSV into the database."""
     category_filter = {c.strip() for c in categories.split(",") if c.strip()} if categories else set()
     try:
         ts = TicketSource(ticket_source.lower())
     except ValueError:
         raise typer.BadParameter(f"Unknown ticket-source '{ticket_source}'. Use 'csv' or 'webhook'.")
-    asyncio.run(_load(input_path, batch_size, language, source, category_filter, max_per_category, ts))
+    asyncio.run(_load(input_path, batch_size, source, category_filter, max_per_category, ts))
 
 
 async def _load(
     input_path: Path,
     batch_size: int,
-    language: str | None,
     source: str,
     category_filter: set[str] | None = None,
     max_per_category: int = 0,
@@ -183,58 +188,18 @@ async def _load(
 
     await init_db()
 
-    # ── Load file (auto-detect format by extension) ────────────────────────
     suffix = input_path.suffix.lower()
     if suffix in (".parquet", ".pq"):
         df = pd.read_parquet(input_path)
-        logger.info("Loaded Parquet file", extra={"metadata": {"path": str(input_path)}})
     elif suffix == ".json":
         df = pd.read_json(input_path)
-        logger.info("Loaded JSON file", extra={"metadata": {"path": str(input_path)}})
     elif suffix == ".jsonl":
         df = pd.read_json(input_path, lines=True)
-        logger.info("Loaded JSONL file", extra={"metadata": {"path": str(input_path)}})
     else:
         df = pd.read_csv(input_path)
-        logger.info("Loaded CSV file", extra={"metadata": {"path": str(input_path)}})
 
     df.columns = [c.strip().lower() for c in df.columns]
-
-    # ── Elasticsearch export normalisation ─────────────────────────────────
-    # Datasets like venkatasubramanian/automatic-ticket-classification are
-    # exported from Elasticsearch and wrap all fields inside a "_source" column.
-    # Flatten it into top-level columns so normal detection works.
-    if "_source" in df.columns:
-        source_df = pd.json_normalize(df["_source"])
-        # Drop ES metadata columns — they must not be picked up by the category detector
-        es_meta = {"_index", "_type", "_id", "_score"}
-        df = pd.concat(
-            [df.drop(columns=[c for c in df.columns if c in es_meta | {"_source"}]),
-             source_df],
-            axis=1,
-        )
-        df.columns = [c.strip().lower() for c in df.columns]
-        logger.info(
-            "Elasticsearch _source column flattened",
-            extra={"metadata": {"rows": len(df), "new_columns": list(df.columns)}},
-        )
-
     logger.info("File loaded", extra={"metadata": {"rows": len(df), "columns": list(df.columns)}})
-
-    # ── Language filter ────────────────────────────────────────────────────
-    lang_col = _detect_column(["language", "lang", "locale"], list(df.columns))
-    if language and lang_col:
-        before = len(df)
-        df = df[df[lang_col].astype(str).str.lower() == language.lower()]
-        logger.info(
-            "Language filter applied",
-            extra={"metadata": {"language": language, "kept": len(df), "dropped": before - len(df)}},
-        )
-    elif language and not lang_col:
-        logger.warning(
-            "Language filter requested but no language column found — skipping filter",
-            extra={"metadata": {"requested_language": language}},
-        )
 
     # ── Detect columns ─────────────────────────────────────────────────────
     title_col = _detect_column(
@@ -260,8 +225,6 @@ async def _load(
         sys.exit(1)
 
     if not title_col:
-        # Datasets like parthpatil/it-support-ticket-data have no separate title —
-        # use the description column and truncate to 150 chars at write time.
         title_col = desc_col
         logger.info(
             "No title column found — using description column as title (truncated to 150 chars)",
@@ -273,16 +236,15 @@ async def _load(
         extra={"metadata": {
             "title": title_col, "description": desc_col,
             "category": cat_col, "priority": prio_col, "resolution": res_col,
+            "ticket_source": ticket_source.value,
         }},
     )
 
-    # ── Clean ──────────────────────────────────────────────────────────────
     df = df.dropna(subset=[title_col, desc_col])
     df[title_col] = df[title_col].astype(str).str.strip()
     df[desc_col] = df[desc_col].astype(str).str.strip()
     logger.info("After null drop", extra={"metadata": {"rows": len(df)}})
 
-    # ── Load ───────────────────────────────────────────────────────────────
     inserted_tickets = 0
     inserted_kb = 0
     skipped = 0
@@ -313,12 +275,10 @@ async def _load(
             raw_cat = str(row[cat_col]) if cat_col and pd.notna(row.get(cat_col, None)) else ""
             category = _map_category(raw_cat) if raw_cat else None
 
-            # Apply category allowlist filter
             if category_filter and (category is None or category.value not in category_filter):
                 skipped += 1
                 continue
 
-            # Apply per-category cap
             if max_per_category and category is not None:
                 count_so_far = category_counts.get(category.value, 0)
                 if count_so_far >= max_per_category:
@@ -350,6 +310,8 @@ async def _load(
                 )
             )
 
+            # Only insert KB entries for training data that has resolutions.
+            # Test-set rows have no resolution column so res_col is None here.
             if res_col and pd.notna(row.get(res_col, None)) and category:
                 resolution_text = str(row[res_col]).strip()
                 if resolution_text:
@@ -384,6 +346,7 @@ async def _load(
             "inserted_kb_entries": inserted_kb,
             "skipped_duplicates": skipped,
             "source": source,
+            "ticket_source": ticket_source.value,
         }},
     )
 

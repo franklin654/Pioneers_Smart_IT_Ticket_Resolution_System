@@ -195,7 +195,7 @@ class TicketEmbedding(Base):
 class KnowledgeBaseEntry(Base):
     """A resolved ticket pair used to build the RAG knowledge base.
 
-    Rows are populated from Kaggle data (``scripts/load_kaggle_data.py``)
+    Rows are populated from synthetic training data (``scripts/load_tickets.py``)
     and can be augmented by agent feedback when a resolution is accepted.
     The ``embedding`` column is populated by ``scripts/index_knowledge_base.py``
     and is nullable until that indexing step runs.

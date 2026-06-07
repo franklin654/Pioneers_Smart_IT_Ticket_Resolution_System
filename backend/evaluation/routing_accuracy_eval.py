@@ -151,7 +151,7 @@ async def _evaluate(fail_under: float, limit: int) -> None:
         console.print(
             "\n[bold red]❌ SKIP — no classified test-set tickets found.[/bold red]"
             "\n  Run the pipeline against the ServiceNow test set first:"
-            "\n  1. python -m scripts.load_servicenow_test_set --input-path data/raw/servicenow_test.parquet"
+            "\n  1. python -m scripts.load_tickets --input-path data/raw/synthetic_test.csv --ticket-source webhook"
             "\n  2. Process tickets through the API or batch script"
         )
         sys.exit(1)

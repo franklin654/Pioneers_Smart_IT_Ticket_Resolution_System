@@ -1,6 +1,6 @@
 """Confidence scoring and multi-domain detection for classification outputs.
 
-Converts the raw probability distribution from the Logistic Regression
+Converts the raw probability distribution from the LinearSVC (calibrated)
 classifier into a structured ``ClassificationOutput`` that drives routing
 decisions downstream.
 
@@ -50,7 +50,7 @@ class ClassificationOutput:
             is below ``multi_domain_diff_threshold``, signalling the ticket
             spans multiple IT domains and should be escalated.
         classification_method: Identifier of the model that produced this
-            output (e.g. ``"logistic_regression_v1"``).
+            output (e.g. ``"linearsvc_v..."``).
     """
 
     predicted_category: TicketCategory
@@ -85,7 +85,7 @@ class ConfidenceScorer:
                 its predicted probability.  Values should sum to approximately
                 1.0 (standard classifier output).
             classification_method: Identifier string for the model version,
-                e.g. ``"logistic_regression_v1"``.  Stored for audit trails.
+                e.g. ``"linearsvc_v..."``.  Stored for audit trails.
 
         Returns:
             Fully populated :class:`ClassificationOutput`.

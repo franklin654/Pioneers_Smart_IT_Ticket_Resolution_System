@@ -114,15 +114,18 @@ cp ../../.env.example ../../.env
 python -m scripts.setup_db
 ```
 
-### 4. Load training data
+### 4. Generate and load training data
 
 ```bash
-# Option A — Kaggle IT support dataset (place CSV at data/raw/tickets.csv)
-python -m scripts.load_kaggle_data --input-path data/raw/tickets.csv
+# Generate synthetic training data via Claude API
+python -m scripts.generate_synthetic_data --mode train --count 1000 --output data/raw/synthetic_train.csv
 
-# Option B — Generate synthetic data via Claude API
-python -m scripts.generate_synthetic_data --count 500 --output data/raw/synthetic.csv
-python -m scripts.load_kaggle_data --input-path data/raw/synthetic.csv
+# Load training data (inserts tickets + knowledge base entries)
+python -m scripts.load_tickets --input-path data/raw/synthetic_train.csv --source synthetic_train
+
+# Generate and load held-out test set (no resolutions; tagged as webhook source)
+python -m scripts.generate_synthetic_data --mode test --count 300 --output data/raw/synthetic_test.csv
+python -m scripts.load_tickets --input-path data/raw/synthetic_test.csv --ticket-source webhook --source synthetic_test
 ```
 
 ### 5. Train the classifier

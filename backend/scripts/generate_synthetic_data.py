@@ -2,7 +2,7 @@
 
 Generates a configurable number of realistic IT support tickets across all
 six ticket categories, balanced by default.  Output is written to CSV for
-subsequent ingestion via ``scripts/load_kaggle_data.py``.
+subsequent ingestion via ``scripts/load_tickets.py``.
 
 NOTE: This script is prepared but NOT executed in Phase 1.
       Run it when Anthropic API usage quota allows.

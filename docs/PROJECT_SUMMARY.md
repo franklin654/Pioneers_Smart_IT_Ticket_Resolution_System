@@ -1,9 +1,9 @@
 # TicketIQ — Project Summary
 ## NASSCOM Hackathon · Trail Blazers Team
 
-**Last updated:** 2026-06-07  
-**Working directory:** `app_v2/`  
-**Backend root:** `app_v2/backend/`
+**Last updated:** 2026-06-08  
+**Working directory:** root of repo  
+**Backend root:** `backend/`
 
 ---
 
@@ -30,7 +30,7 @@ Ticket In
     ▼
 [Embedding Generator] ← sentence-transformers/all-MiniLM-L6-v2 (384-dim)
     │
-    ├──► [Classifier]  ← LogisticRegression on embeddings
+    ├──► [Classifier]  ← LinearSVC (calibrated) on embeddings
     │         │
     │         ▼
     │    [Confidence Scorer]
@@ -68,7 +68,7 @@ AUTO_RESOLVE   ASSIGNED   ESCALATED
 | ORM | SQLAlchemy 2.0 async + asyncpg |
 | Database | PostgreSQL 16 + pgvector extension |
 | Embedding | sentence-transformers/all-MiniLM-L6-v2 (384-dim) |
-| Classifier | scikit-learn LogisticRegression |
+| Classifier | scikit-learn LinearSVC + CalibratedClassifierCV |
 | BM25 index | rank-bm25 |
 | LLM | Ollama (Mistral-7B) / Claude API — switched via `LLM_BACKEND` env var |
 | Agent orchestration | AutoGen (pyautogen) GroupChat, 4 agents |
@@ -115,7 +115,7 @@ All 10 phases are complete.
 **Files:** `src/services/classifier.py`, `scripts/train_classifier.py`
 
 - `EmbeddingService`: wraps `SentenceTransformer`, batch-encodes with `embedding_batch_size=32`
-- `ClassifierService`: loads `data/models/classifier.pkl` (LogisticRegression trained on embedded ticket text)
+- `ClassifierService`: loads `data/models/classifier.pkl` (LinearSVC + CalibratedClassifierCV trained on embedded ticket text)
 - Training script reads all labeled tickets from DB, encodes them, trains with an 80/20 split, gates on macro F1 ≥ 0.90
 - Multi-domain detection: if top-2 class probability gap < `multi_domain_diff_threshold`, ticket is flagged multi-domain → escalated
 
@@ -179,43 +179,35 @@ Four evaluators, each with a CLI gate (`--fail-under`) and `sys.exit(1)` on fail
 - Health check: `GET /health/ready` → `{"status":"ready","database":"ok"}`
 - `.env` includes both asyncpg `DATABASE_URL` (used by Python) and plain `POSTGRES_*` vars (used by Docker Compose) — Pydantic ignores the Docker vars via `extra="ignore"`
 
-### Phase 10 — Extended Training & Evaluation Data Sources
-**Files modified:** `scripts/load_kaggle_data.py`, `src/db/repositories/ticket_repo.py`, `evaluation/run_all.py`, `pyproject.toml`  
-**Files created:** `scripts/load_uci_incidents.py`, `scripts/load_servicenow_test_set.py`, `evaluation/routing_accuracy_eval.py`
+### Phase 10 — Synthetic Data Pipeline & 5th Evaluator
+**Files modified:** `scripts/load_tickets.py` (renamed from `load_kaggle_data.py`), `src/db/repositories/ticket_repo.py`, `evaluation/run_all.py`, `pyproject.toml`  
+**Files created:** `evaluation/routing_accuracy_eval.py`  
+**Files deleted:** `scripts/load_uci_incidents.py`, `scripts/load_servicenow_test_set.py`
 
-Goal: expand training data from ~10K to ~100K+ tickets and add a 5th evaluator.
+Goal: replace external dataset dependency with a fully synthetic data pipeline and add a 5th evaluator.
 
 **Key additions:**
 
-1. **`load_kaggle_data.py` extensions**
-   - Auto-detects file format by extension: `.csv`, `.json`, `.jsonl`, `.parquet` / `.pq`
-   - Elasticsearch export normalisation: detects `_source` column, flattens with `pd.json_normalize()`, strips ES metadata (`_index`, `_type`, `_id`, `_score`) before column detection
-   - `--language` filter: drops rows where detected language column doesn't match (e.g. `--language en`)
+1. **`generate_synthetic_data.py` — two generation modes**
+   - `--mode train`: uses `CATEGORY_SCENARIOS` (standard realistic issues); outputs title/description/category/resolution/priority CSV
+   - `--mode test`: uses `TEST_CATEGORY_SCENARIOS` (harder edge cases — e.g. NTP clock drift, BGP route flapping); outputs title/description/category/priority CSV (no resolution column)
+   - Balanced generation: `--count N` distributed evenly across 6 categories
+   - `--categories` flag for targeted generation
+
+2. **`load_tickets.py`** — generic synthetic CSV loader
+   - `--ticket-source csv` (default): training data — inserts tickets + `KnowledgeBaseEntry` rows (if resolution column present)
+   - `--ticket-source webhook`: held-out test set — inserts tickets only (no KB entries); isolated from training by `TicketSource.WEBHOOK` discriminator
    - `--source` flag: tags `KnowledgeBaseEntry.source` for traceability
-   - Extended column detection candidates:
-     - title: `short_description`, `instruction`, `title`, `subject`, `summary`
-     - description: `complaint_what_happened`, `body`, `content`, `description`, `text`, `detail`, `document`, `issue`
-     - category: `queue`, `assignment_group`, `department`, `category`, `topic_group`, `type`, `class`, `label`, `group`
-   - Title fallback: when no title column found, uses first 150 chars of description
-   - Text priority handling: maps `"high"` → 1, `"medium"` → 2, `"low"` → 3, `"critical"` → 1
-   - Extended `CATEGORY_MAPPING`: added `administrative rights`, `service outages`, `product support`, `network ops`, `internal project`, `purchase`, `outage`, `service outages and maintenance`
 
-2. **`load_uci_incidents.py`** — UCI specialist (ultimately skipped — see dataset analysis below)
+3. **`ticket_repo.get_by_source()`** — repo method querying by `TicketSource` enum
 
-3. **`load_servicenow_test_set.py`** — Loads 500-row held-out test set
-   - Tags tickets `TicketSource.WEBHOOK` (not CSV) to isolate from training data
-   - Does NOT insert into `knowledge_base_entries`
-   - Maps `assignment_group` → `TicketCategory` for ground truth
-
-4. **`ticket_repo.get_by_source()`** — new repo method querying by `TicketSource` enum
-
-5. **`routing_accuracy_eval.py`** — 5th evaluator
+4. **`routing_accuracy_eval.py`** — 5th evaluator
    - Queries `TicketSource.WEBHOOK` tickets with classification loaded
    - Compares `predicted_category` vs `ticket.category` (ground truth)
    - Per-category accuracy table across all 6 categories
    - Gate: overall accuracy ≥ `fail_under` (default 0.75)
 
-6. **`run_all.py`** updated to run 5/5 evaluators with `--fail-under-routing` CLI option
+5. **`run_all.py`** updated to run 5/5 evaluators with `--fail-under-routing` CLI option
 
 ---
 
@@ -225,108 +217,82 @@ Goal: expand training data from ~10K to ~100K+ tickets and add a 5th evaluator.
 Docker Compose env vars (`POSTGRES_DB`, `POSTGRES_USER`, etc.) in the shared `.env` caused `ValidationError: extra key not allowed` on startup. Fixed by adding `extra="ignore"` to `SettingsConfigDict` in `src/core/config.py`.
 
 ### Content Hash Deduplication
-SHA-256 of `title.strip().lower() + "::" + description.strip().lower()`. A dataset where `issue` (short categorical label like "Billing") was used as both title and description caused near-total deduplication (154 inserted out of 78,313). Fixed by prioritising `complaint_what_happened` as description candidate for that dataset.
+SHA-256 of `title.strip().lower() + "::" + description.strip().lower()`. Prevents re-inserting identical tickets if `load_tickets.py` is run more than once against the same CSV.
 
-### 6StringNinja Dataset — Held-Out Test Set Strategy
-Dataset has only 500 rows — too small for training. Repurposed as a held-out routing evaluation set by using `TicketSource.WEBHOOK` as a DB discriminator. No schema changes needed; the `TicketSource` enum value was unused in the hackathon context.
+### Synthetic Held-Out Test Set Strategy
+`generate_synthetic_data.py --mode test` generates harder scenarios (e.g. BGP route flapping, autovacuum bloat, PAM misconfiguration) without resolution text, so the pipeline cannot cheat by pattern-matching the answer. Loaded via `load_tickets.py --ticket-source webhook` to tag rows as `TicketSource.WEBHOOK` — the `routing_accuracy_eval.py` evaluator uses this discriminator to isolate them from training data.
 
 ### pgvector IVFFlat Index Tuning
-At 82K KB entries, the default `lists=100` becomes suboptimal. Recommended tuning: `lists=200–300` for better recall/performance trade-off.
+At small synthetic data volumes the default `lists=100` is more than adequate. If KB entries grow beyond 50K, tune to `lists=200` for better recall/performance.
 
 ---
 
-## 5. Dataset Analysis & Loading Pipeline
+## 5. Synthetic Data Pipeline
 
-### Files Present in `app_v2/backend/data/raw/`
+### Generated Files in `backend/data/raw/`
 
-| File | Rows | Status | Notes |
+| File | Rows | Mode | Notes |
 | --- | --- | --- | --- |
-| `kaggle_customer_support.csv` | 8,469 | **Load** (step 3b) | Ticket Subject/Description/Type/Priority/Resolution all detected ✓ |
-| `kaggle_it_service.csv` | 47,837 | **Load** (step 3c) | `Document`→desc, `Topic_group`→category — fixed in Phase 10 analysis |
-| `kaggle_parthpatil.csv` | 29,651 | **Load** (step 3d) | `Body`→desc, `Department`→category; text priority fixed |
-| `multilingual.csv` | 28,587 | **Load** (step 3e) | Use `--language en` for 16,338 EN rows; all columns detected ✓ |
-| `servicenow_test.parquet` | 500 | **Load last** (step 3f) | Held-out test set; `IT Support`→APP, `Network Ops`→NETWORK ✓ |
-| `kaggle_automatic.json` | 78,313 | **SKIP** | Financial domain (CFPB complaints); no IT categories; do not load |
-| `uci_incidents.csv` | 141,712 | **SKIP** | Fully anonymized ("Category 26", "Symptom 72", "Group 70"); no usable text |
-| `bitext.csv` | 26,872 | **SKIP** | E-commerce categories (ORDER/REFUND/INVOICE); no IT labels |
+| `synthetic_train.csv` | ~1,200 | `--mode train` | 200 per category; includes resolution column; loaded as CSV source |
+| `synthetic_test.csv` | ~300 | `--mode test` | 50 per category; harder edge cases; no resolution column; loaded as WEBHOOK source |
 
-### Datasets Not Downloaded / No Longer Available
+### Data Volumes
 
-| Dataset | Reason |
-| --- | --- |
-| `kaggle_it_support.csv` (suraj520) | No longer available on Kaggle |
-
-### Effective Training Data Volume
-
-| Source | Rows loaded | IT-labeled |
-| --- | --- | --- |
-| Synthetic (optional) | ~1,000 | ~1,000 |
-| Kaggle Customer Support | ~8,500 | partial |
-| Kaggle IT Service | ~47,800 | ~23,000 |
-| Kaggle parthpatil | ~29,600 | ~12,000 |
-| Multilingual (EN) | ~16,300 | ~12,000 |
-| **Total training** | **~103,000** | **~48,000+** |
-| 6StringNinja (test set) | 500 | 500 |
+| Source | Rows | IT-labeled | Notes |
+| --- | --- | --- | --- |
+| Synthetic training | ~1,200 | 1,200 | All 6 categories, balanced, includes resolutions → KB entries |
+| **Total training** | **~1,200** | **~1,200** | All rows fully labeled |
+| Synthetic test set (held-out) | ~300 | 300 | `TicketSource.WEBHOOK` — evaluation only, never trained on |
 
 ---
 
-## 6. Database State & Cleanup
+## 6. Database State
 
 ### DB Connection
 ```
-postgresql+asyncpg://saisivakesh:Password123@localhost:5432/ticket_routing
+postgresql+asyncpg://<user>:<password>@localhost:5432/ticket_routing
 ```
-
-### DB Cleanup Required
-The Automatic Ticket Classification dataset (`kaggle_automatic.json`) was loaded by mistake during earlier testing — 20,930 tickets with `category=null` were inserted with `source='csv'`. These must be deleted before loading the correct datasets:
-
-```sql
-DELETE FROM tickets WHERE source = 'csv';
-```
-
-This cascades to all child rows (`ticket_classifications`, `ticket_resolutions`, `ticket_embeddings`, `feedback_logs`) automatically.
+(Set via `DATABASE_URL` in `.env`.)
 
 ### Schema Highlights
 - `tickets.content_hash` — SHA-256 dedup key; unique constraint prevents re-inserting identical tickets
-- `tickets.source` — `TicketSource` enum; `WEBHOOK` is reserved for the held-out test set
-- `knowledge_base_entries.source` — free-text string (e.g. `"kaggle_it_service"`, `"multilingual"`) for traceability
+- `tickets.source` — `TicketSource` enum; `WEBHOOK` is reserved for the held-out test set; `CSV` for training data
+- `knowledge_base_entries.source` — free-text string (e.g. `"synthetic_train"`) for traceability
 - `knowledge_base_entries.embedding` — `vector(384)` with IVFFlat index
 
 ---
 
 ## 7. How to Run the Full Pipeline
 
-All commands run from `app_v2/backend/` with the `ticket_routing` conda environment active.
+All commands run from `backend/` with the Python environment active.
 
 ### Setup (once)
 ```bash
-conda activate ticket_routing
 pip install -e ".[dev]"
 python -m scripts.setup_db
 ```
 
-### DB Cleanup (if any bad data exists)
+### Generate & Load Training Data
 ```bash
-psql postgresql://saisivakesh:Password123@localhost:5432/ticket_routing \
-  -c "DELETE FROM tickets WHERE source = 'csv';"
+# Generate 1,200 synthetic training tickets (200 per category)
+python -m scripts.generate_synthetic_data \
+  --mode train --count 1200 --output data/raw/synthetic_train.csv
+
+# Load training tickets + KB entries
+python -m scripts.load_tickets \
+  --input-path data/raw/synthetic_train.csv --source synthetic_train
 ```
 
-### Load Training Data
+### Generate & Load Held-Out Test Set
 ```bash
-# 3b. Customer Support
-python -m scripts.load_kaggle_data --input-path data/raw/kaggle_customer_support.csv --source kaggle_customer_support
+# Generate 300 harder test tickets (50 per category, no resolutions)
+python -m scripts.generate_synthetic_data \
+  --mode test --count 300 --output data/raw/synthetic_test.csv
 
-# 3c. IT Service (~47K, ~23K labeled)
-python -m scripts.load_kaggle_data --input-path data/raw/kaggle_it_service.csv --source kaggle_it_service
-
-# 3d. Parthpatil (~29K, ~12K labeled)
-python -m scripts.load_kaggle_data --input-path data/raw/kaggle_parthpatil.csv --source kaggle_parthpatil
-
-# 3e. Multilingual EN (~16K, ~12K labeled)
-python -m scripts.load_kaggle_data --input-path data/raw/multilingual.csv --language en --source multilingual
-
-# 3f. ServiceNow test set (held-out — load LAST)
-python -m scripts.load_servicenow_test_set --input-path data/raw/servicenow_test.parquet
+# Load as WEBHOOK source (isolated from training)
+python -m scripts.load_tickets \
+  --input-path data/raw/synthetic_test.csv \
+  --ticket-source webhook --source synthetic_test
 ```
 
 ### Train & Index
@@ -354,7 +320,7 @@ python -m evaluation.run_all \
 
 ## 8. Key Files Reference
 
-### Backend (`app_v2/backend/`)
+### Backend (`backend/`)
 
 | Path | Purpose |
 | --- | --- |
@@ -362,36 +328,34 @@ python -m evaluation.run_all \
 | `src/core/logging.py` | Structured JSON logger |
 | `src/db/models.py` | SQLAlchemy ORM models |
 | `src/db/repositories/` | Async DB repositories (ticket, kb, feedback) |
-| `src/services/ingestion.py` | Validation, PII masking, dedup |
-| `src/services/classifier.py` | Embedding + LogisticRegression inference |
-| `src/services/retriever.py` | Hybrid RAG retriever (dense + BM25 + MMR) |
-| `src/services/llm.py` | LLM abstraction (Ollama / Claude) |
+| `src/ingestion/pipeline.py` | Validation, PII masking, dedup |
+| `src/classification/classifier.py` | Embedding + LinearSVC inference |
+| `src/rag/retriever.py` | Hybrid RAG retriever (dense + BM25 + MMR) |
+| `src/rag/generator.py` | LLM abstraction (Ollama / Claude) |
 | `src/agents/` | AutoGen orchestration |
 | `src/api/main.py` | FastAPI app entrypoint |
 | `scripts/setup_db.py` | Create tables and pgvector extension |
-| `scripts/load_kaggle_data.py` | Generic multi-format loader (CSV/JSON/Parquet) |
-| `scripts/load_servicenow_test_set.py` | Held-out test set loader |
-| `scripts/load_uci_incidents.py` | UCI specialist loader (dataset currently skipped) |
-| `scripts/train_classifier.py` | Train and save LogisticRegression model |
+| `scripts/generate_synthetic_data.py` | Claude-powered synthetic ticket generator (train + test modes) |
+| `scripts/load_tickets.py` | Synthetic CSV → DB loader (training + held-out test set) |
+| `scripts/train_classifier.py` | Train and save LinearSVC (calibrated) model |
 | `scripts/index_knowledge_base.py` | Build BM25 index from KB entries |
-| `scripts/generate_synthetic_data.py` | Claude-powered synthetic ticket generator |
 | `evaluation/classification_eval.py` | Evaluator 1: Macro F1 |
 | `evaluation/rag_eval.py` | Evaluator 2: Precision@5 |
 | `evaluation/llm_judge.py` | Evaluator 3: LLM-as-judge |
 | `evaluation/end_to_end_eval.py` | Evaluator 4: p95 latency |
 | `evaluation/routing_accuracy_eval.py` | Evaluator 5: Routing accuracy (held-out set) |
 | `evaluation/run_all.py` | Unified runner for all 5 evaluators |
-| `data/raw/` | Raw dataset files |
+| `data/raw/` | Generated CSV files |
 | `data/models/classifier.pkl` | Trained classifier artifact |
 
-### Project Root (`app_v2/`)
+### Project Root
 
 | Path | Purpose |
 | --- | --- |
-| `DATA_LOADING_GUIDE.md` | Step-by-step loading instructions with exact CLI commands |
-| `IMPLEMENTATION_PLAN.md` | Original architecture and phase plan |
-| `API_CONTRACT.md` | REST API endpoint documentation |
-| `imple_docs/Phase_*_Implementation.md` | Per-phase implementation notes |
+| `docs/DATA_LOADING_GUIDE.md` | Step-by-step synthetic data generation and loading guide |
+| `docs/IMPLEMENTATION_PLAN.md` | Original architecture and phase plan |
+| `docs/API_CONTRACT.md` | REST API endpoint documentation |
+| `docs/implementation_phases/Phase_*_Implementation.md` | Per-phase implementation notes |
 | `docker/docker-compose.yml` | Full stack container definition |
 | `.env` | Environment configuration (not committed) |
 
@@ -413,16 +377,16 @@ CONFIDENCE_LOW_THRESHOLD=0.60
 
 ---
 
-## 10. Current State (as of 2026-06-07)
+## 10. Current State (as of 2026-06-08)
 
 | Item | Status |
 | --- | --- |
 | All 10 phases implemented | ✅ Complete |
 | DB schema created (`setup_db`) | ✅ Done |
-| Bad data cleanup (`DELETE WHERE source='csv'`) | ⚠️ **Pending** — must run before loading |
-| Training data loaded | ⚠️ **Pending** — steps 3b–3f |
+| Synthetic training data generated & loaded | ⚠️ **Pending** — run steps 1–2 in DATA_LOADING_GUIDE.md |
+| Synthetic test set generated & loaded | ⚠️ **Pending** — run steps 3–4 in DATA_LOADING_GUIDE.md |
 | Classifier trained | ⚠️ **Pending** — after data load |
 | KB indexed | ⚠️ **Pending** — after data load |
 | Evaluation suite | ✅ Code complete, ready to run after training |
 
-**Next immediate action:** Run the `DELETE` cleanup command, then follow `DATA_LOADING_GUIDE.md` steps 3b → 3f → 4 → 5 → 7.
+**Next immediate action:** Follow `DATA_LOADING_GUIDE.md` steps 1 → 4 → 5 → 6 → 8.

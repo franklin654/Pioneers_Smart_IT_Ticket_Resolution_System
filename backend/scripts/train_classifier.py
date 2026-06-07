@@ -1,8 +1,8 @@
 """End-to-end classifier training CLI script.
 
 Loads labeled tickets from the database, generates embeddings, trains a
-Logistic Regression model, evaluates on a held-out test set, and saves
-the serialized artifact to ``data/models/classifier.pkl``.
+LinearSVC (CalibratedClassifierCV) model, evaluates on a held-out test set,
+and saves the serialized artifact to ``data/models/classifier.pkl``.
 
 Usage::
 
@@ -12,7 +12,7 @@ Usage::
 
 Prerequisites:
     - Database initialized (``python -m scripts.setup_db``)
-    - Kaggle data loaded (``python -m scripts.load_kaggle_data``)
+    - Training data loaded (``python -m scripts.load_tickets``)
     - ``data/models/`` directory (created automatically if missing)
 """
 
@@ -39,7 +39,7 @@ console = Console()
 @app.command()
 def main(
     test_size: float = typer.Option(0.20, "--test-size", help="Fraction held out for evaluation"),
-    c: float = typer.Option(1.0, "--c", help="Logistic Regression regularization strength"),
+    c: float = typer.Option(1.0, "--c", help="LinearSVC regularization strength (C parameter)"),
     max_iter: int = typer.Option(1000, "--max-iter", help="Maximum solver iterations"),
     model_output: Path = typer.Option(
         Path("data/models/classifier.pkl"),

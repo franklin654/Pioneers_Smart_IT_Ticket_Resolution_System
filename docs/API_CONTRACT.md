@@ -387,7 +387,7 @@ Fetch full ticket detail including nested classification and resolution results.
       { "category": "security",        "probability": 0.025 }
     ],
     "is_multi_domain": false,
-    "classification_method": "logistic_regression_v1"
+    "classification_method": "linearsvc_v20260608_143012"
   },
   "resolution": {
     "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
@@ -641,7 +641,7 @@ top_categories          array       List of CategoryProbability (top 3)
   └─ category           string      TicketCategory
   └─ probability        float       0.0–1.0
 is_multi_domain         boolean     True if top-2 difference < threshold → should escalate
-classification_method   string      Model identifier, e.g. "logistic_regression_v1"
+classification_method   string      Model identifier, e.g. "linearsvc_v20260608_143012"
 ```
 
 ### `ResolutionResponse`

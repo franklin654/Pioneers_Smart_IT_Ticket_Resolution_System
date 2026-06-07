@@ -1,15 +1,17 @@
 """Classifier training pipeline.
 
-Trains a Logistic Regression model on sentence-transformer embeddings of
-labeled IT support tickets.  Produces a serialized ``TrainedModelArtifact``
-that ``TicketClassifier`` can load for real-time inference.
+Trains a LinearSVC (wrapped in CalibratedClassifierCV) on sentence-transformer
+embeddings of labeled IT support tickets.  Produces a serialized
+``TrainedModelArtifact`` that ``TicketClassifier`` can load for real-time
+inference.
 
 Workflow:
     1. Load all labeled tickets from the database (``category IS NOT NULL``)
     2. Build text = ``"{title} {description}"`` for each ticket
     3. Batch-generate embeddings via ``EmbeddingGenerator``
     4. Stratified 80/20 train/test split
-    5. Fit ``LogisticRegression`` (no scaler — embeddings are already L2-normalized)
+    5. Fit ``LinearSVC`` wrapped in ``CalibratedClassifierCV`` (cv=3) so that
+       ``predict_proba`` is available for confidence scoring
     6. Evaluate: accuracy, macro F1, per-class F1, confusion matrix
     7. Serialize ``TrainedModelArtifact`` with ``joblib``
 
@@ -51,9 +53,6 @@ class TrainingConfig:
         C: Inverse of regularization strength (sklearn convention).
             Smaller → stronger regularization.
         max_iter: Max solver iterations; increase if convergence warnings appear.
-        solver: Optimization algorithm.  ``"lbfgs"`` is recommended for
-            multi-class with moderate data sizes.
-        multi_class: ``"multinomial"`` for true softmax; ``"ovr"`` for OvR.
         random_state: Fixed seed for reproducibility.
         test_size: Fraction of data held out for evaluation.
         stratify: Keep class proportions equal in train/test splits.
@@ -62,7 +61,6 @@ class TrainingConfig:
 
     C: float = 1.0
     max_iter: int = 1000
-    solver: str = "lbfgs"
     class_weight: str = "balanced"
     random_state: int = 42
     test_size: float = 0.20
@@ -187,7 +185,7 @@ class ClassifierTrainer:
         metrics = self._evaluate(pipeline, label_encoder, X_test, list(y_test))
 
         # ── Step 6: Save ───────────────────────────────────────────────────
-        model_version = f"logistic_regression_v{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
+        model_version = f"linearsvc_v{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
         saved_path = self._save_artifact(
             pipeline=pipeline,
             label_encoder=label_encoder,

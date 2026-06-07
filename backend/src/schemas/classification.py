@@ -24,7 +24,7 @@ class ClassificationResponse(BaseModel):
             is below the configured threshold, indicating the ticket spans
             multiple domains and should be escalated.
         classification_method: Model identifier used (e.g.
-            ``"logistic_regression_v1"``).
+            ``"linearsvc_v20260608_143012"``).
     """
 
     model_config = ConfigDict(from_attributes=True)

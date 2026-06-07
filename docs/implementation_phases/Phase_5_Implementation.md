@@ -171,7 +171,7 @@ class ClassifierAgent(ConversableAgent):
     "confidence_level": "high",
     "is_multi_domain": False,
     "top_categories": [...],
-    "classification_method": "logistic_regression_v...",
+    "classification_method": "linearsvc_v...",
 }
 ```
 
