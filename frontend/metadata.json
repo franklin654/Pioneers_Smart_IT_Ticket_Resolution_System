@@ -1,0 +1,6 @@
+{
+  "name": "TicketIQ IT Desk",
+  "description": "Autonomous IT Service Desk Routing and Auto-Resolution Core Dashboard. Runs PII masking, softmax categories classification, RAG runbooks search, and LLM-as-Judge evaluation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
