@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+:root {
+  --color-surface: #0f172a;
+  --color-panel: #1e293b;
+  --color-border: #334155;
+  --color-accent: #6366f1;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-surface);
+  color: #f1f5f9;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100svh;
+}
