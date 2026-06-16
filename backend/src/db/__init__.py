@@ -1,0 +1,45 @@
+"""Database: SQLAlchemy models, async session/engine, repositories."""
+
+from src.db.database import dispose_engine, get_db, get_engine, init_db, session_scope
+from src.db.models import (
+    TERMINAL_TICKET_STATUSES,
+    Base,
+    Classification,
+    ClassificationMethod,
+    ConfidenceLevel,
+    FeedbackAction,
+    FeedbackLog,
+    KnowledgeBaseEntry,
+    Resolution,
+    ResolutionStep,
+    RoutingDecision,
+    Ticket,
+    TicketCategory,
+    TicketEmbedding,
+    TicketSource,
+    TicketStatus,
+)
+
+__all__ = [
+    "Base",
+    "Classification",
+    "ClassificationMethod",
+    "ConfidenceLevel",
+    "FeedbackAction",
+    "FeedbackLog",
+    "KnowledgeBaseEntry",
+    "Resolution",
+    "ResolutionStep",
+    "RoutingDecision",
+    "TERMINAL_TICKET_STATUSES",
+    "Ticket",
+    "TicketCategory",
+    "TicketEmbedding",
+    "TicketSource",
+    "TicketStatus",
+    "dispose_engine",
+    "get_db",
+    "get_engine",
+    "init_db",
+    "session_scope",
+]
