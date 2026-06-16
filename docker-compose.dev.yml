@@ -1,0 +1,55 @@
+# Development overrides — mount source directories and enable hot reload.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# This file extends docker-compose.yml; only the overrides are listed here.
+
+services:
+
+  api:
+    build:
+      target: base          # stop at the base stage (no COPY src)
+    volumes:
+      - ./backend/src:/app/src:cached
+      - ./backend/data:/app/data:cached
+    environment:
+      ENVIRONMENT: development
+      LOG_LEVEL:   DEBUG
+      DB_ECHO:     "true"
+    command:
+      - uvicorn
+      - src.api.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      - --reload
+      - --reload-dir
+      - /app/src
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      # Skip the production nginx build entirely — use the Vite dev server instead
+      context:    ./frontend
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./frontend/src:/app/src:cached
+      - ./frontend/public:/app/public:cached
+    ports:
+      - "5173:5173"
+
+  # Expose Prometheus and Grafana on non-standard ports to avoid clashing
+  # with a local instance the developer may already have running
+  prometheus:
+    ports:
+      - "9091:9090"
+
+  grafana:
+    ports:
+      - "3001:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED:    "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE:   Admin
