@@ -90,7 +90,7 @@ async def run_sandbox(body: SandboxRequest, _: CurrentUser) -> dict:
             output=(
                 f"category: {cls.category.value}\n"
                 f"confidence: {cls.confidence:.2f} ({cls.confidence_level})\n"
-                f"method: {cls.method.value}\n"
+                f"method: {cls.classification_method}\n"
                 f"multi_domain: {cls.is_multi_domain}\n"
                 f"{gate_line}"
             ),

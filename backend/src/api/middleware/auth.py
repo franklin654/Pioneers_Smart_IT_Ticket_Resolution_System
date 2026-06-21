@@ -15,14 +15,17 @@ from typing import Annotated
 
 import jwt
 from fastapi import Cookie, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from src.core.config import get_settings
 from src.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
+# HTTPBearer renders a simple "paste token" dialog in Swagger UI rather than
+# the OAuth2 password flow, which breaks when the token endpoint wraps its
+# response in the API envelope instead of returning a bare access_token field.
+_bearer_scheme = HTTPBearer(auto_error=True)
 
 _ISSUER = "ticketiq"
 _AUDIENCE = "ticketiq-api"
@@ -87,8 +90,10 @@ def _decode_token(token: str, expected_type: str) -> dict:
     return payload
 
 
-def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> str:
-    payload = _decode_token(token, "access")
+def get_current_user(
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(_bearer_scheme)],
+) -> str:
+    payload = _decode_token(credentials.credentials, "access")
     username: str | None = payload.get("sub")
     if not username:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token.")
