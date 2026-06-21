@@ -1,5 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { DOMAIN_STYLES } from "../../../shared/constants";
+import { formatDate } from "../../../shared/utils";
 import type { Category } from "../../../types";
 
 interface KBEntry {
@@ -9,11 +10,82 @@ interface KBEntry {
   category: Category;
   source_ticket_id: string | null;
   created_at: string;
+  relevance_score?: number;
 }
 
 interface KBResponse {
   data: KBEntry[];
   meta: { total: number; offset: number; limit: number };
+}
+
+function KBEntryModal({ entry, onClose }: { entry: KBEntry; onClose: () => void }) {
+  const style = DOMAIN_STYLES[entry.category];
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={entry.title}
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl border border-[var(--color-border)] bg-[var(--color-panel)] p-6 space-y-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4">
+          <h2 className="text-base font-semibold text-slate-100 leading-snug">
+            {entry.title}
+          </h2>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-700 hover:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Meta */}
+        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+          <span
+            className={`rounded px-2 py-0.5 font-medium bg-${style.color}-500/20 text-${style.color}-300`}
+          >
+            {style.label}
+          </span>
+          {entry.relevance_score !== undefined && (
+            <span>{Math.round(entry.relevance_score * 100)}% semantic match</span>
+          )}
+          <span>{formatDate(entry.created_at)}</span>
+          {entry.source_ticket_id && (
+            <span>
+              Source:{" "}
+              <span className="font-mono text-slate-400">{entry.source_ticket_id}</span>
+            </span>
+          )}
+        </div>
+
+        <hr className="border-[var(--color-border)]" />
+
+        {/* Full resolution content */}
+        <div className="space-y-1">
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+            Resolution
+          </p>
+          <p className="text-sm text-slate-200 whitespace-pre-wrap leading-relaxed">
+            {entry.content}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function KBTab() {
@@ -24,6 +96,7 @@ export function KBTab() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
+  const [selected, setSelected] = useState<KBEntry | null>(null);
 
   const search = useCallback(async () => {
     setLoading(true);
@@ -86,9 +159,7 @@ export function KBTab() {
       </div>
 
       {error && (
-        <p role="alert" className="text-sm text-rose-400">
-          {error}
-        </p>
+        <p role="alert" className="text-sm text-rose-400">{error}</p>
       )}
 
       {searched && (
@@ -104,23 +175,41 @@ export function KBTab() {
             return (
               <li
                 key={e.id}
-                className="rounded-xl border border-[var(--color-border)] bg-[var(--color-panel)] p-4 space-y-1"
+                className="rounded-xl border border-[var(--color-border)] bg-[var(--color-panel)] p-4 space-y-2"
               >
                 <div className="flex items-start justify-between gap-3">
                   <h3 className="font-medium text-slate-100">{e.title}</h3>
-                  <span
-                    className={`shrink-0 rounded px-2 py-0.5 text-xs font-medium bg-${style.color}-500/20 text-${style.color}-300`}
-                  >
-                    {style.label}
-                  </span>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {e.relevance_score !== undefined && (
+                      <span className="text-xs text-slate-500">
+                        {Math.round(e.relevance_score * 100)}% match
+                      </span>
+                    )}
+                    <span
+                      className={`rounded px-2 py-0.5 text-xs font-medium bg-${style.color}-500/20 text-${style.color}-300`}
+                    >
+                      {style.label}
+                    </span>
+                  </div>
                 </div>
+
                 <p className="text-sm text-slate-400 line-clamp-3">{e.content}</p>
-                {e.source_ticket_id && (
-                  <p className="text-xs text-slate-600">
-                    Source ticket:{" "}
-                    <span className="font-mono">{e.source_ticket_id}</span>
-                  </p>
-                )}
+
+                <div className="flex items-center justify-between">
+                  {e.source_ticket_id ? (
+                    <p className="text-xs text-slate-600">
+                      Source: <span className="font-mono">{e.source_ticket_id}</span>
+                    </p>
+                  ) : (
+                    <span />
+                  )}
+                  <button
+                    onClick={() => setSelected(e)}
+                    className="text-xs font-medium text-indigo-400 hover:text-indigo-300 focus:outline-none focus:underline"
+                  >
+                    View full entry →
+                  </button>
+                </div>
               </li>
             );
           })}
@@ -136,6 +225,10 @@ export function KBTab() {
           Enter a search term or filter by category to browse knowledge base entries.
           Entries are automatically created from resolved tickets.
         </p>
+      )}
+
+      {selected && (
+        <KBEntryModal entry={selected} onClose={() => setSelected(null)} />
       )}
     </div>
   );
