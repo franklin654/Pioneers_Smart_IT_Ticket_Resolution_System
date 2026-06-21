@@ -52,6 +52,10 @@ if [[ ! -f .env ]]; then
 fi
 
 # ── launch ────────────────────────────────────────────────────────────────────
+# Tear down any stale containers first to avoid "port already in use" errors
+# from a previous interrupted startup leaving containers in Created state.
+docker compose down --remove-orphans 2>/dev/null || true
+
 bold "Starting TicketIQ (production mode)..."
 # shellcheck disable=SC2086
 docker compose up $BUILD_FLAG -d

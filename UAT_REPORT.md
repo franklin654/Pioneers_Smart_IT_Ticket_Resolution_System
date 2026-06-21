@@ -505,6 +505,136 @@ Resolution tab was to scroll the sidebar list.
 
 ---
 
+---
+
+### UAT-013 — Agent Sandbox crashes with `'ClassificationOutput' object has no attribute 'method'`
+
+| Field | Detail |
+|---|---|
+| **Severity** | High — Agent Sandbox entirely non-functional |
+| **Discovered** | UAT session 3 (2026-06-22) |
+| **Status** | ✅ Fixed |
+
+**Symptom:**  
+Every sandbox run returned an error trace at the ClassifierAgent stage:
+`'ClassificationOutput' object has no attribute 'method'`.
+
+**Root cause:**  
+`backend/src/api/routes/sandbox.py` line 93 referenced `cls.method.value` to print
+the classification method in the trace output. `ClassificationOutput` has no `method`
+attribute — the correct field name is `classification_method` (a plain `str`, no `.value`).
+
+**Fix applied:**  
+```python
+# Before
+f"method: {cls.method.value}\n"
+
+# After
+f"method: {cls.classification_method}\n"
+```
+
+**Files changed:**  
+- `backend/src/api/routes/sandbox.py`
+
+---
+
+### UAT-014 — Swagger UI sends `Authorization: Bearer undefined` for all protected endpoints
+
+| Field | Detail |
+|---|---|
+| **Severity** | Medium — Swagger UI unusable for testing authenticated endpoints |
+| **Discovered** | UAT session 3 (2026-06-22) |
+| **Status** | ✅ Fixed |
+
+**Symptom:**  
+After clicking "Authorize" in the Swagger UI (`/api/docs`) and logging in with
+admin credentials, all subsequent requests had `Authorization: Bearer undefined`
+in the header, causing 401 errors on every call.
+
+**Root cause:**  
+The security scheme was `OAuth2PasswordBearer`, which expects the `/auth/token`
+response to have `access_token` at the top level of the JSON body (per the OAuth2
+spec). The endpoint wraps its response in the API envelope:
+`{ "data": { "access_token": "..." } }`. Swagger UI reads `response.access_token`
+which resolves to `undefined`, hence `Bearer undefined`.
+
+Removing the envelope from the login response would have broken the frontend's
+`client.ts` which reads `json.data.access_token`.
+
+**Fix applied:**  
+Replaced `OAuth2PasswordBearer` with `HTTPBearer` as the Swagger security scheme.
+`HTTPBearer` shows a simple "paste token" dialog instead of trying to auto-login.
+
+Workflow in Swagger:
+1. Call `POST /auth/token` — copy `data.access_token` from the response.
+2. Click **Authorize** → paste the raw token.
+3. All subsequent requests include `Authorization: Bearer <token>`.
+
+Frontend is unaffected — `client.ts` sets the Authorization header manually and
+never touches the FastAPI security scheme dependency.
+
+```python
+# Before
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
+
+def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> str: ...
+
+# After
+_bearer_scheme = HTTPBearer(auto_error=True)
+
+def get_current_user(
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(_bearer_scheme)],
+) -> str:
+    payload = _decode_token(credentials.credentials, "access")
+    ...
+```
+
+**Files changed:**  
+- `backend/src/api/middleware/auth.py`
+
+---
+
+### UAT-015 — `./launch.fish` fails with port-already-in-use and fish variable errors
+
+| Field | Detail |
+|---|---|
+| **Severity** | Medium — launch scripts unreliable across repeat runs |
+| **Discovered** | UAT session 3 (2026-06-22) |
+| **Status** | ✅ Fixed |
+
+**Symptoms:**
+1. `no such service:` error from `docker compose up` when `--build` flag not set.
+2. `set: Tried to change the read-only variable "status"` repeated in the health-wait loop.
+3. Port 5544 already bound after an interrupted previous run, even after `docker compose down`.
+
+**Root causes:**
+
+1. Fish expands an empty-string variable as a literal empty argument — `docker compose up "" -d` → Docker interprets `""` as a service name → `no such service:`. The bash scripts used `$BUILD_FLAG` the same way but bash drops empty strings in unquoted expansions; fish does not.
+
+2. `status` is a fish built-in read-only variable (holds the last command exit code). Assigning to it with `set status (...)` threw the read-only error.
+
+3. An interrupted startup leaves `docker-proxy` processes (run as root) holding the port even after the containers are removed. `docker compose down` removes the containers but doesn't always reap the orphaned proxy processes.
+
+**Fixes applied (all four launch scripts):**
+
+- Replaced `set BUILD_FLAG ""` / `docker compose up $BUILD_FLAG -d` with an explicit `if/else` branch that either passes `--build` or omits it entirely — no empty-string argument.
+- Renamed the health-check variable `status` → `health` and the timeout variable `timeout` → `svc_timeout` to avoid fish built-in collisions.
+- Added `docker ps -a --filter "name=<project>" --format "{{.ID}}" | xargs -r docker rm -f` after `docker compose down` to force-remove any containers still in `Created`/`Exited` state before starting.
+- Added `sleep 1` after teardown to let the kernel release port bindings before `docker compose up` runs.
+
+**Note:** If orphaned `docker-proxy` processes survive (root-owned, not removable by compose), they must be killed manually:
+```bash
+sudo kill $(pgrep -f "docker-proxy.*5544")
+```
+
+**Files changed:**  
+- `launch.sh`
+- `launch.fish`
+- `launch-dev.sh`
+- `launch-dev.fish`
+
+---
+
 ## Issues Pending / Under Investigation
 
 *None at this time. Section will be updated as testing continues.*
@@ -542,7 +672,7 @@ These were caught during the Docker spin-up, before any functional testing:
 | 9 | Ticket Search tab — "Open →" navigates to Resolution tab with ticket pre-selected | — | |
 | 10 | Knowledge Base tab — semantic search returns ranked results with relevance score | — | |
 | 11 | Knowledge Base tab — "View full entry →" opens modal with full resolution content | — | |
-| 12 | Agent Sandbox tab — pipeline trace runs all 5 stages with timing | — | |
+| 12 | Agent Sandbox tab — pipeline trace runs all 5 stages with timing | ✅ | Fixed cls.method → cls.classification_method (UAT-013) |
 | 13 | Analytics tab — status + category charts | — | |
 | 14 | Prometheus metrics endpoint | — | |
 | 15 | Grafana dashboard | — | |

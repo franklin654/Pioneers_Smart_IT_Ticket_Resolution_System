@@ -13,15 +13,15 @@ function green; printf '\033[0;32m%s\033[0m\n' $argv; end
 function bold;  printf '\033[1m%s\033[0m\n' $argv; end
 
 # ── flags ──────────────────────────────────────────────────────────────────────
-set BUILD_FLAG ""
-set DO_DOWN 0
+set do_build 0
+set do_down 0
 
 for arg in $argv
   switch $arg
     case --build
-      set BUILD_FLAG --build
+      set do_build 1
     case --down
-      set DO_DOWN 1
+      set do_down 1
     case '*'
       red "Unknown argument: $arg"
       exit 1
@@ -29,7 +29,7 @@ for arg in $argv
 end
 
 # ── stop mode ─────────────────────────────────────────────────────────────────
-if test $DO_DOWN -eq 1
+if test $do_down -eq 1
   bold "Stopping TicketIQ stack..."
   docker compose down
   green "Stack stopped."
@@ -54,22 +54,32 @@ if not test -f .env
 end
 
 # ── launch ────────────────────────────────────────────────────────────────────
+docker compose down --remove-orphans
+# Force-remove any containers still in Created/Exited state from this project
+docker ps -a --filter "name=pioneers_smart_it_ticket_resolution_system" --format "{{.ID}}" \
+  | xargs -r docker rm -f 2>/dev/null; or true
+sleep 1
+
 bold "Starting TicketIQ (production mode)..."
-docker compose up $BUILD_FLAG -d
+if test $do_build -eq 1
+  docker compose up --build -d
+else
+  docker compose up -d
+end
 
 bold "Waiting for services to be healthy..."
 for service in postgres api
-  set timeout 60
-  while test $timeout -gt 0
-    set status (docker compose ps --format json $service 2>/dev/null \
+  set svc_timeout 60
+  while test $svc_timeout -gt 0
+    set health (docker compose ps --format json $service 2>/dev/null \
       | python3 -c "import sys,json; data=sys.stdin.read().strip(); rows=json.loads('['+data.replace('}\n{','},{').replace('\n','').rstrip(',')+']') if data else []; print(rows[0].get('Health','') if rows else '')" 2>/dev/null; or echo "")
-    if test "$status" = healthy
+    if test "$health" = healthy
       break
     end
     sleep 2
-    set timeout (math $timeout - 2)
+    set svc_timeout (math $svc_timeout - 2)
   end
-  if test $timeout -le 0
+  if test $svc_timeout -le 0
     red "Service '$service' did not become healthy in time."
     red "Check logs: docker compose logs $service"
     exit 1

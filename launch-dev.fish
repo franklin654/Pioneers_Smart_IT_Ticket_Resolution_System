@@ -15,15 +15,15 @@ function green; printf '\033[0;32m%s\033[0m\n' $argv; end
 function bold;  printf '\033[1m%s\033[0m\n' $argv; end
 
 # ── flags ──────────────────────────────────────────────────────────────────────
-set BUILD_FLAG ""
-set DO_DOWN 0
+set do_build 0
+set do_down 0
 
 for arg in $argv
   switch $arg
     case --build
-      set BUILD_FLAG --build
+      set do_build 1
     case --down
-      set DO_DOWN 1
+      set do_down 1
     case '*'
       red "Unknown argument: $arg"
       exit 1
@@ -31,7 +31,7 @@ for arg in $argv
 end
 
 # ── stop mode ─────────────────────────────────────────────────────────────────
-if test $DO_DOWN -eq 1
+if test $do_down -eq 1
   bold "Stopping TicketIQ dev stack..."
   docker compose $COMPOSE_FILES down
   green "Dev stack stopped."
@@ -56,21 +56,27 @@ if not test -f .env
 end
 
 # ── launch ────────────────────────────────────────────────────────────────────
+docker compose $COMPOSE_FILES down --remove-orphans 2>/dev/null; or true
+
 bold "Starting TicketIQ (dev mode — hot reload enabled)..."
-docker compose $COMPOSE_FILES up $BUILD_FLAG -d
+if test $do_build -eq 1
+  docker compose $COMPOSE_FILES up --build -d
+else
+  docker compose $COMPOSE_FILES up -d
+end
 
 bold "Waiting for Postgres to be healthy..."
-set timeout 60
-while test $timeout -gt 0
-  set status (docker compose ps --format json postgres 2>/dev/null \
+set svc_timeout 60
+while test $svc_timeout -gt 0
+  set health (docker compose ps --format json postgres 2>/dev/null \
     | python3 -c "import sys,json; data=sys.stdin.read().strip(); rows=json.loads('['+data.replace('}\n{','},{').replace('\n','').rstrip(',')+']') if data else []; print(rows[0].get('Health','') if rows else '')" 2>/dev/null; or echo "")
-  if test "$status" = healthy
+  if test "$health" = healthy
     break
   end
   sleep 2
-  set timeout (math $timeout - 2)
+  set svc_timeout (math $svc_timeout - 2)
 end
-if test $timeout -le 0
+if test $svc_timeout -le 0
   red "Postgres did not become healthy in time. Check: docker compose logs postgres"
   exit 1
 end

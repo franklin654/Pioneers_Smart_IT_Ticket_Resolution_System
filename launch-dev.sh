@@ -55,6 +55,9 @@ if [[ ! -f .env ]]; then
 fi
 
 # ── launch ────────────────────────────────────────────────────────────────────
+# shellcheck disable=SC2086
+docker compose $COMPOSE_FILES down --remove-orphans 2>/dev/null || true
+
 bold "Starting TicketIQ (dev mode — hot reload enabled)..."
 # shellcheck disable=SC2086
 docker compose $COMPOSE_FILES up $BUILD_FLAG -d
