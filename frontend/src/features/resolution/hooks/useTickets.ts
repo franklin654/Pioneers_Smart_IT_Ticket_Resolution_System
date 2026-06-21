@@ -17,7 +17,7 @@ export function useTickets() {
     setLoading(true);
     setError(null);
     try {
-      const { tickets: list } = await listTickets({ limit: 50 });
+      const { tickets: list } = await listTickets({ limit: 15 });
       setTickets(list);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load tickets.");
