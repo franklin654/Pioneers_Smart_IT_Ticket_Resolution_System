@@ -29,7 +29,8 @@ _TERMINAL_STATUSES = {
     TicketStatus.AUTO_RESOLVED,
     TicketStatus.ASSIGNED,
     TicketStatus.ESCALATED,
-    TicketStatus.AWAITING_REVIEW,
+    # AWAITING_REVIEW is intentionally excluded — the pipeline resumes after
+    # reclassification and the socket must stay open to stream those updates.
 }
 
 # {ticket_id: set of websocket connections}

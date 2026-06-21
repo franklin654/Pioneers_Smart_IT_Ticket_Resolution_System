@@ -41,8 +41,11 @@ services:
       ENVIRONMENT:           production
       LOG_LEVEL:             INFO
       CORS_ALLOWED_ORIGINS:  '["http://localhost"]'
+      RATE_LIMIT_PER_MINUTE: "600"
     volumes:
       - ./backend/data:/app/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8000:8000"
     healthcheck:
