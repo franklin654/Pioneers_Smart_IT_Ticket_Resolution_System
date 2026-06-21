@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
 from src.db.models import FeedbackAction, FeedbackLog, Resolution, ResolutionStep
@@ -30,6 +30,18 @@ class ResolutionRepository(BaseRepository[Resolution]):
         existing = await self.get_by_ticket_id(ticket_id)
         if existing is not None:
             await self.delete(existing)
+
+    async def update_suggested_steps(
+        self,
+        resolution_id: uuid.UUID,
+        steps: list[ResolutionStep],
+    ) -> None:
+        stmt = (
+            update(Resolution)
+            .where(Resolution.id == resolution_id)
+            .values(suggested_steps=[s.model_dump() for s in steps])
+        )
+        await self.session.execute(stmt)
 
     async def record_feedback(
         self,

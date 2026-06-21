@@ -9,7 +9,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import selectinload
 
 from src.db.models import Resolution, Ticket, TicketCategory, TicketSource, TicketStatus
@@ -21,6 +21,7 @@ class TicketSearchFilters:
     category: TicketCategory | None = None
     status: TicketStatus | None = None
     priority: int | None = None
+    q: str | None = None
     offset: int = 0
     limit: int = 50
 
@@ -47,18 +48,15 @@ class TicketRepository(BaseRepository[Ticket]):
         return result.scalar_one_or_none()
 
     async def update_status(self, ticket_id: uuid.UUID, status: TicketStatus) -> None:
-        ticket = await self.get_by_id(ticket_id)
-        if ticket is None:
-            return
-        ticket.status = status
-        await self.session.flush()
+        # Direct SQL UPDATE bypasses the identity map to avoid silent no-ops when
+        # the ORM object was already loaded (and possibly partially expired) in the
+        # same session by an earlier query such as get_with_relations().
+        stmt = update(Ticket).where(Ticket.id == ticket_id).values(status=status)
+        await self.session.execute(stmt)
 
     async def update_category(self, ticket_id: uuid.UUID, category: TicketCategory) -> None:
-        ticket = await self.get_by_id(ticket_id)
-        if ticket is None:
-            return
-        ticket.category = category
-        await self.session.flush()
+        stmt = update(Ticket).where(Ticket.id == ticket_id).values(category=category)
+        await self.session.execute(stmt)
 
     async def search(self, filters: TicketSearchFilters) -> tuple[list[Ticket], int]:
         conditions = []
@@ -68,9 +66,21 @@ class TicketRepository(BaseRepository[Ticket]):
             conditions.append(Ticket.status == filters.status)
         if filters.priority is not None:
             conditions.append(Ticket.priority == filters.priority)
+        if filters.q:
+            pattern = f"%{filters.q}%"
+            conditions.append(
+                Ticket.title.ilike(pattern) | Ticket.description.ilike(pattern)
+            )
 
         count_stmt = select(func.count()).select_from(Ticket)
-        list_stmt = select(Ticket).order_by(Ticket.created_at.desc())
+        list_stmt = (
+            select(Ticket)
+            .options(
+                selectinload(Ticket.classification),
+                selectinload(Ticket.resolution),
+            )
+            .order_by(Ticket.created_at.desc())
+        )
         for condition in conditions:
             count_stmt = count_stmt.where(condition)
             list_stmt = list_stmt.where(condition)
