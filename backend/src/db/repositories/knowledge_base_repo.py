@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from src.db.models import KnowledgeBaseEntry, TicketCategory
 from src.db.repositories.base_repo import BaseRepository
@@ -19,6 +19,35 @@ _DEFAULT_BM25_LOAD_LIMIT = 50_000
 
 class KnowledgeBaseRepository(BaseRepository[KnowledgeBaseEntry]):
     model = KnowledgeBaseEntry
+
+    async def search(
+        self,
+        query: str | None = None,
+        category: TicketCategory | None = None,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> tuple[list[KnowledgeBaseEntry], int]:
+        conditions = []
+        if query:
+            pattern = f"%{query}%"
+            conditions.append(
+                KnowledgeBaseEntry.title.ilike(pattern)
+                | KnowledgeBaseEntry.description.ilike(pattern)
+                | KnowledgeBaseEntry.resolution.ilike(pattern)
+            )
+        if category:
+            conditions.append(KnowledgeBaseEntry.category == category)
+
+        base = select(KnowledgeBaseEntry)
+        count_stmt = select(func.count()).select_from(KnowledgeBaseEntry)
+        for c in conditions:
+            base = base.where(c)
+            count_stmt = count_stmt.where(c)
+
+        list_stmt = base.order_by(KnowledgeBaseEntry.created_at.desc()).offset(offset).limit(limit)
+        total = (await self.session.execute(count_stmt)).scalar_one()
+        rows = (await self.session.execute(list_stmt)).scalars().all()
+        return list(rows), total
 
     async def search_similar(
         self,

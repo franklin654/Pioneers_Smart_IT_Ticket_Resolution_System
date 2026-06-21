@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.api.envelope import error
-from src.api.routes import auth, health, resolutions, tickets
+from src.api.routes import auth, health, kb, resolutions, sandbox, tickets
 from src.api.websocket import router as ws_router
 from src.core.config import get_settings
 from src.core.exceptions import AppBaseException
@@ -86,6 +86,8 @@ def create_app() -> FastAPI:
     app.include_router(health.router, prefix=prefix)
     app.include_router(tickets.router, prefix=prefix)
     app.include_router(resolutions.router, prefix=prefix)
+    app.include_router(kb.router, prefix=prefix)
+    app.include_router(sandbox.router, prefix=prefix)
     app.include_router(ws_router)
 
     return app

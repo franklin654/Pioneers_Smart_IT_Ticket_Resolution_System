@@ -130,11 +130,9 @@ async def get_ticket(ticket_id: uuid.UUID, _: CurrentUser) -> dict:
     async with session_scope() as session:
         repo = TicketRepository(session)
         ticket = await repo.get_with_relations(ticket_id)
-
-    if ticket is None:
-        raise HTTPException(status_code=404, detail="Ticket not found.")
-
-    return ok(_ticket_dict(ticket))
+        if ticket is None:
+            raise HTTPException(status_code=404, detail="Ticket not found.")
+        return ok(_ticket_dict(ticket))
 
 
 @router.get("/")
@@ -143,6 +141,7 @@ async def list_tickets(
     category: TicketCategory | None = None,
     ticket_status: TicketStatus | None = Query(None, alias="status"),
     priority: int | None = None,
+    q: str | None = Query(default=None, max_length=200),
     offset: int = 0,
     limit: int = Query(default=50, le=200),
 ) -> dict:
@@ -150,19 +149,19 @@ async def list_tickets(
         category=category,
         status=ticket_status,
         priority=priority,
+        q=q,
         offset=offset,
         limit=limit,
     )
     async with session_scope() as session:
         repo = TicketRepository(session)
         tickets, total = await repo.search(filters)
-
-    return collection(
-        [_ticket_dict(t) for t in tickets],
-        total=total,
-        offset=offset,
-        limit=limit,
-    )
+        return collection(
+            [_ticket_dict(t) for t in tickets],
+            total=total,
+            offset=offset,
+            limit=limit,
+        )
 
 
 @router.patch("/{ticket_id}/reclassify", status_code=status.HTTP_202_ACCEPTED)
