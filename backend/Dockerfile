@@ -7,7 +7,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         gcc g++ libpq-dev curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml .
+COPY pyproject.toml ./
+COPY src/ src/
 # Install all runtime deps (no dev extras)
 RUN pip install --no-cache-dir -e .
 
@@ -17,8 +18,6 @@ RUN python -m spacy download en_core_web_sm
 # Pre-fetch sentence-transformers model so first request isn't slow
 RUN python -c "from sentence_transformers import SentenceTransformer; \
     SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
-
-COPY src/ src/
 
 EXPOSE 8000
 

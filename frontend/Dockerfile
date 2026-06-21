@@ -3,10 +3,10 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 
-COPY package*.json ./
+COPY frontend/package*.json ./
 RUN npm ci --prefer-offline
 
-COPY . .
+COPY frontend/ .
 RUN npm run build
 
 # --- Stage 2: serve via nginx ---
