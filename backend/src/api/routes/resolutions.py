@@ -60,9 +60,13 @@ async def submit_feedback(
         )
 
         if body.action == "accepted":
-            await ticket_repo.update_status(ticket_id, TicketStatus.AUTO_RESOLVED)
+            await ticket_repo.update_status(ticket_id, TicketStatus.CLOSED)
         elif body.action == "modified":
-            await ticket_repo.update_status(ticket_id, TicketStatus.AUTO_RESOLVED)
+            if body.modified_resolution:
+                await resolution_repo.update_suggested_steps(
+                    ticket.resolution.id, body.modified_resolution
+                )
+            await ticket_repo.update_status(ticket_id, TicketStatus.CLOSED)
         elif body.action == "rejected":
             await ticket_repo.update_status(ticket_id, TicketStatus.ESCALATED)
 
