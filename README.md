@@ -307,8 +307,12 @@ docker compose exec api python scripts/generate_synthetic_data.py \
     --mode test  --count 300  --output data/raw/synthetic_test.csv
 
 docker compose exec api python scripts/load_tickets.py \
-    --train data/raw/synthetic_train.csv \
-    --test  data/raw/synthetic_test.csv
+    --input-path data/raw/synthetic_train.csv \
+    --source synthetic_train
+
+docker compose exec api python scripts/load_tickets.py \
+    --input-path data/raw/synthetic_test.csv \
+    --source synthetic_test --ticket-source webhook
 
 # Embed knowledge base entries
 docker compose exec api python scripts/embed_knowledge_base.py
@@ -427,12 +431,15 @@ python scripts/generate_synthetic_data.py \
     --mode test --count 300 \
     --output data/raw/synthetic_test.csv
 
-# Load both into the DB
-# CSV-source tickets become training data.
-# The test set is loaded as WEBHOOK-source (held-out for evaluation only).
+# Load training set (CSV source — used for classifier training + KB seeding)
 python scripts/load_tickets.py \
-    --train data/raw/synthetic_train.csv \
-    --test  data/raw/synthetic_test.csv
+    --input-path data/raw/synthetic_train.csv \
+    --source synthetic_train
+
+# Load held-out set (WEBHOOK source — evaluation only, never used for training)
+python scripts/load_tickets.py \
+    --input-path data/raw/synthetic_test.csv \
+    --source synthetic_test --ticket-source webhook
 ```
 
 > `generate_synthetic_data.py` always uses the **Anthropic Claude API** regardless
