@@ -9,11 +9,13 @@ export interface TabRoute {
   id: string;
   label: string;
   icon: string;
-  component: ComponentType;
+  // null for tabs that require injected props (rendered directly in App.tsx)
+  component: ComponentType | null;
 }
 
 export const TAB_ROUTES: TabRoute[] = [
   { id: "intake", label: "Submit Ticket", icon: "＋", component: IntakeTab },
+  { id: "tickets", label: "Ticket Search", icon: "🔍", component: null },
   { id: "resolution", label: "Resolution", icon: "⚡", component: ResolutionTab },
   { id: "kb", label: "Knowledge Base", icon: "📚", component: KBTab },
   { id: "agent", label: "Agent Sandbox", icon: "🔬", component: AgentTab },

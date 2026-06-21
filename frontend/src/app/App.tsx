@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useAuth } from "../features/auth";
 import { LoginForm } from "../features/auth";
+import { ResolutionTab } from "../features/resolution";
+import { TicketSearchTab } from "../features/tickets";
 import { TAB_ROUTES } from "./routes";
 
 const SLIDE = {
@@ -13,6 +15,20 @@ const SLIDE = {
 export default function App() {
   const { isAuthenticated, username, login, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState(TAB_ROUTES[0].id);
+  const [pendingTicketId, setPendingTicketId] = useState<string | null>(null);
+
+  const handleOpenTicket = useCallback((id: string) => {
+    setPendingTicketId(id);
+    setActiveTab("resolution");
+  }, []);
+
+  const handleTabChange = useCallback((id: string) => {
+    // Clear pending ticket when user manually navigates away from resolution
+    if (id !== "resolution") {
+      setPendingTicketId(null);
+    }
+    setActiveTab(id);
+  }, []);
 
   if (!isAuthenticated) {
     return (
@@ -27,7 +43,18 @@ export default function App() {
     );
   }
 
-  const ActiveComponent = TAB_ROUTES.find((r) => r.id === activeTab)!.component;
+  const renderTab = () => {
+    if (activeTab === "tickets") {
+      return <TicketSearchTab onOpenTicket={handleOpenTicket} />;
+    }
+    if (activeTab === "resolution") {
+      return <ResolutionTab initialTicketId={pendingTicketId} />;
+    }
+    const route = TAB_ROUTES.find((r) => r.id === activeTab);
+    if (!route?.component) return null;
+    const ActiveComponent = route.component;
+    return <ActiveComponent />;
+  };
 
   return (
     <div className="flex min-h-screen flex-col bg-[var(--color-surface)] text-slate-100">
@@ -42,7 +69,7 @@ export default function App() {
               {TAB_ROUTES.map((route) => (
                 <li key={route.id}>
                   <button
-                    onClick={() => setActiveTab(route.id)}
+                    onClick={() => handleTabChange(route.id)}
                     aria-current={activeTab === route.id ? "page" : undefined}
                     className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
                       activeTab === route.id
@@ -75,7 +102,7 @@ export default function App() {
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6">
         <AnimatePresence mode="wait">
           <motion.div key={activeTab} {...SLIDE}>
-            <ActiveComponent />
+            {renderTab()}
           </motion.div>
         </AnimatePresence>
       </main>
