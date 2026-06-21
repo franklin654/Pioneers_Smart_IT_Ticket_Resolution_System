@@ -14,8 +14,8 @@ export type TicketStatus =
 
 export type Category =
   | "infrastructure"
-  | "software"
-  | "hardware"
+  | "application"
+  | "database"
   | "network"
   | "access_management"
   | "security";

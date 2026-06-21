@@ -51,8 +51,8 @@ export const STATUS_COLORS: Partial<Record<TicketStatus, string>> = {
 
 export const CATEGORIES: Category[] = [
   "infrastructure",
-  "software",
-  "hardware",
+  "application",
+  "database",
   "network",
   "access_management",
   "security",
@@ -60,8 +60,8 @@ export const CATEGORIES: Category[] = [
 
 export const DOMAIN_STYLES: Record<Category, { label: string; color: string }> = {
   infrastructure: { label: "Infrastructure", color: "blue" },
-  software: { label: "Software", color: "violet" },
-  hardware: { label: "Hardware", color: "orange" },
+  application: { label: "Application", color: "violet" },
+  database: { label: "Database", color: "orange" },
   network: { label: "Network", color: "cyan" },
   access_management: { label: "Access Mgmt", color: "green" },
   security: { label: "Security", color: "rose" },
