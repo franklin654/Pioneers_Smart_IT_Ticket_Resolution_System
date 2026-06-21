@@ -5,12 +5,13 @@ import { useWebSocket } from "../hooks/useWebSocket";
 import { ClassificationPanel } from "../../../shared/components/ClassificationPanel";
 import { RoutingPanel } from "../../../shared/components/RoutingPanel";
 import { ReclassifyPanel } from "./ReclassifyPanel";
-import { PIPELINE_STEPS, STATUS_STEP_MAP, TERMINAL_STATUSES, STATUS_LABELS } from "../../../shared/constants";
+import { PIPELINE_STEPS, STATUS_STEP_MAP, STATUS_LABELS } from "../../../shared/constants";
 import { formatDate, priorityLabel, priorityColor } from "../../../shared/utils";
 
 interface FeedbackState {
   action: "accepted" | "modified" | "rejected" | null;
   modified: ResolutionStep[];
+  submitted: boolean;
 }
 
 function PipelineStepper({ status }: { status: TicketStatus }) {
@@ -48,7 +49,11 @@ function PipelineStepper({ status }: { status: TicketStatus }) {
   );
 }
 
-export function ResolutionTab() {
+interface Props {
+  initialTicketId?: string | null;
+}
+
+export function ResolutionTab({ initialTicketId }: Props = {}) {
   const {
     tickets,
     activeTicket,
@@ -63,11 +68,20 @@ export function ResolutionTab() {
   } = useTickets();
 
   const [wsTicketId, setWsTicketId] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<FeedbackState>({ action: null, modified: [] });
+  const [feedback, setFeedback] = useState<FeedbackState>({ action: null, modified: [], submitted: false });
 
   useEffect(() => {
     void fetchTickets();
   }, [fetchTickets]);
+
+  // Auto-select ticket when navigated from Ticket Search
+  useEffect(() => {
+    if (initialTicketId) {
+      void handleSelect(initialTicketId);
+    }
+    // Only run when initialTicketId changes, not on every render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialTicketId]);
 
   const handleStatusChange = useCallback(
     (status: TicketStatus) => {
@@ -91,7 +105,7 @@ export function ResolutionTab() {
   async function handleSelect(id: string) {
     await selectTicket(id);
     setWsTicketId(id);
-    setFeedback({ action: null, modified: [] });
+    setFeedback({ action: null, modified: [], submitted: false });
   }
 
   async function handleReclassify(cat: Category) {
@@ -99,8 +113,12 @@ export function ResolutionTab() {
     setWsTicketId(activeTicket?.id ?? null);
   }
 
-  const isTerminal = activeTicket
-    ? (TERMINAL_STATUSES as readonly string[]).includes(activeTicket.status)
+  // Feedback buttons only show when a resolution exists but hasn't been
+  // acted on yet. Once the ticket is closed (accepted/modified) or
+  // the user explicitly rejected it (escalated by their own action),
+  // the server state is the source of truth — local feedback state is not.
+  const awaitingFeedback = activeTicket
+    ? activeTicket.status === "auto_resolved" || activeTicket.status === "assigned"
     : false;
 
   return (
@@ -217,34 +235,136 @@ export function ResolutionTab() {
                     </ol>
                   )}
 
-                  {/* Feedback buttons — only for terminal statuses */}
-                  {isTerminal && !feedback.action && (
+                  {/* Feedback — only while ticket still awaits a decision */}
+                  {awaitingFeedback && !feedback.action && (
                     <div
                       className="flex gap-2"
                       role="group"
                       aria-label="Resolution feedback"
                     >
                       <button
-                        onClick={() => void sendFeedback("accepted")}
+                        onClick={async () => {
+                          await sendFeedback("accepted");
+                          setFeedback((f) => ({ ...f, action: "accepted", submitted: true }));
+                        }}
                         className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                       >
                         Accept
                       </button>
                       <button
                         onClick={() =>
-                          setFeedback((f) => ({ ...f, action: "modified" }))
+                          setFeedback({
+                            action: "modified",
+                            modified: activeTicket.resolution?.suggested_steps ?? [],
+                            submitted: false,
+                          })
                         }
                         className="rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
                       >
                         Modify
                       </button>
                       <button
-                        onClick={() => void sendFeedback("rejected")}
+                        onClick={async () => {
+                          await sendFeedback("rejected");
+                          setFeedback((f) => ({ ...f, action: "rejected", submitted: true }));
+                        }}
                         className="rounded-lg bg-rose-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-500"
                       >
                         Reject
                       </button>
                     </div>
+                  )}
+
+                  {/* Inline step editor for Modify */}
+                  {awaitingFeedback && feedback.action === "modified" && !feedback.submitted && (
+                    <div className="space-y-3">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-amber-400">
+                        Edit resolution steps
+                      </p>
+                      {feedback.modified.map((step, idx) => (
+                        <div key={idx} className="flex gap-2 items-start">
+                          <span className="shrink-0 mt-2 font-mono text-indigo-400 text-sm w-5 text-right">
+                            {idx + 1}.
+                          </span>
+                          <textarea
+                            rows={2}
+                            value={step.instruction}
+                            onChange={(e) =>
+                              setFeedback((f) => ({
+                                ...f,
+                                modified: f.modified.map((s, i) =>
+                                  i === idx ? { ...s, instruction: e.target.value } : s,
+                                ),
+                              }))
+                            }
+                            className="flex-1 rounded-lg bg-slate-700 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
+                          />
+                          <button
+                            onClick={() =>
+                              setFeedback((f) => {
+                                const next = f.modified
+                                  .filter((_, i) => i !== idx)
+                                  .map((s, i) => ({ ...s, step_number: i + 1 }));
+                                return { ...f, modified: next };
+                              })
+                            }
+                            aria-label="Delete step"
+                            className="shrink-0 mt-1.5 rounded px-2 py-1 text-xs text-rose-400 hover:bg-rose-500/20 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        onClick={() =>
+                          setFeedback((f) => ({
+                            ...f,
+                            modified: [
+                              ...f.modified,
+                              { step_number: f.modified.length + 1, instruction: "" },
+                            ],
+                          }))
+                        }
+                        className="text-xs text-amber-400 hover:text-amber-300 focus:outline-none focus:underline"
+                      >
+                        + Add step
+                      </button>
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          onClick={async () => {
+                            await sendFeedback("modified", feedback.modified);
+                            setFeedback((f) => ({ ...f, submitted: true }));
+                          }}
+                          className="rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        >
+                          Submit changes
+                        </button>
+                        <button
+                          onClick={() => setFeedback({ action: null, modified: [], submitted: false })}
+                          className="rounded-lg bg-slate-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Confirmation after feedback submitted this session */}
+                  {feedback.submitted && (
+                    <p className="text-sm text-emerald-400">
+                      {feedback.action === "accepted" && "✓ Resolution accepted — ticket closed."}
+                      {feedback.action === "modified" && "✓ Modified resolution submitted — ticket closed."}
+                      {feedback.action === "rejected" && "✓ Resolution rejected — ticket escalated for review."}
+                    </p>
+                  )}
+
+                  {/* Status banner on reload — server is source of truth */}
+                  {!awaitingFeedback && !feedback.submitted && (
+                    activeTicket.status === "closed" ? (
+                      <p className="text-sm text-slate-400">Resolution was accepted — ticket is closed.</p>
+                    ) : activeTicket.status === "escalated" ? (
+                      <p className="text-sm text-slate-400">Resolution was rejected — ticket escalated for review.</p>
+                    ) : null
                   )}
                 </div>
               )}
