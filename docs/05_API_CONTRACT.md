@@ -64,7 +64,16 @@ Response `200`:
 
 ### `GET /tickets/`
 
-Query: `category`, `status`, `priority`, `offset`, `limit` (max 200).
+Query params:
+
+| Param | Type | Description |
+|---|---|---|
+| `q` | string (max 200) | Keyword search — ILIKE match on `title` OR `description` |
+| `category` | TicketCategory | Filter by category |
+| `status` | TicketStatus | Filter by status |
+| `priority` | int | Filter by priority (1=High, 2=Med, 3=Low) |
+| `offset` | int | Pagination offset (default 0) |
+| `limit` | int (max 200) | Page size (default 50) |
 
 Response `200`:
 ```json
@@ -101,9 +110,105 @@ only when `action = "modified"`.
 
 Response: `204 No Content`.
 
-- `accepted` / `modified` → ticket status → `closed`.
-- `rejected` → ticket status unchanged, flagged for manual handling.
+| Action | Ticket status after | Steps updated |
+|---|---|---|
+| `accepted` | `closed` | No — original steps kept |
+| `modified` | `closed` | Yes — `resolutions.suggested_steps` overwritten with submitted steps |
+| `rejected` | `escalated` | No |
+
+All actions append a row to `feedback_logs` (audit trail). Modified steps are
+persisted to `resolutions.suggested_steps` via a direct SQL UPDATE so the next
+`GET /tickets/{id}` returns the corrected steps.
+
 - `404` if no resolution exists yet for this ticket.
+- `409` if ticket is not in `auto_resolved` or `assigned` status.
+
+## Knowledge Base
+
+### `GET /kb/`
+
+Semantic search over `knowledge_base_entries` using pgvector ANN (cosine distance).
+
+Query params:
+
+| Param | Type | Description |
+|---|---|---|
+| `q` | string | Search query. When present, runs sentence-transformer embedding + pgvector ANN. When absent, returns a paginated browse (ILIKE on all text fields). |
+| `category` | TicketCategory | Optional category filter applied to both search modes |
+| `offset` | int | Pagination offset (browse mode only; semantic results are top-k, not paged) |
+| `limit` | int | Max results (default 20) |
+
+Response `200`:
+```json
+{
+  "data": [
+    {
+      "id": "...",
+      "title": "...",
+      "description": "...",
+      "content": "...",         // full resolution text
+      "category": "infrastructure",
+      "source_ticket_id": "...",
+      "relevance_score": 0.923, // present on semantic results; absent on browse
+      "created_at": "..."
+    }
+  ],
+  "meta": { "total": 5, "offset": 0, "limit": 20 }
+}
+```
+
+## Agent Sandbox
+
+### `POST /sandbox/run`
+
+Runs a ticket description through the full 5-stage pipeline and returns a timed
+trace. **No DB writes** — results are ephemeral.
+
+Request:
+```json
+{ "description": "Cannot access the VPN after password reset", "category": null }
+```
+`category` optional — if omitted the ClassifierAgent predicts it.
+
+Response `200`:
+```json
+{
+  "data": {
+    "ticket_id": "sandbox",
+    "traces": [
+      {
+        "stage": "classifier",
+        "duration_ms": 42,
+        "result": { "category": "network", "confidence": 0.91, "confidence_level": "high" },
+        "info": null
+      },
+      {
+        "stage": "rag",
+        "duration_ms": 180,
+        "result": { "retrieved_count": 5, "top_titles": ["VPN Setup Guide", ...] }
+      },
+      { "stage": "reranker", "duration_ms": 35, "result": { "reranked_count": 5 } },
+      {
+        "stage": "generator",
+        "duration_ms": 4200,
+        "result": { "steps": [ { "step_number": 1, "instruction": "..." }, ... ] }
+      },
+      {
+        "stage": "evaluator",
+        "duration_ms": 3100,
+        "result": { "quality_score": 4.2 }
+      }
+    ],
+    "final_status": "auto_resolved"
+  }
+}
+```
+
+The pre-generation confidence gate is **not enforced** in sandbox mode — all 5
+stages always run so the full trace is always visible. The ClassifierAgent trace
+includes an `info` field indicating whether the gate would have triggered.
+
+`final_status`: `"auto_resolved"` | `"assigned"` | `"escalated"` | `"error"`.
 
 ## Health & Metrics
 

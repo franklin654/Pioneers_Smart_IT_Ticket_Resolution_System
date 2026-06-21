@@ -149,6 +149,19 @@ Ticket In
   transition (including `awaiting_review`) to the browser. No polling.
 - **Refresh token rotation** — `/auth/refresh` was a stub in v1; it is fully
   implemented in v2 with single-use rotation.
+- **Resolution feedback loop** — Accept / Modify / Reject actions persist to the
+  DB (status → `closed` or `escalated`). Modified steps overwrite
+  `resolutions.suggested_steps` so the corrected resolution is visible on reload.
+- **Knowledge Base semantic search** — `GET /kb/` runs pgvector ANN cosine search
+  when a query is provided; falls back to paginated ILIKE browse otherwise.
+  Results include a `relevance_score`. The UI shows full resolution content in a
+  modal ("View full entry").
+- **Agent Sandbox** — `POST /sandbox/run` traces a description through all 5
+  pipeline stages (Classifier → RAG → MMR → LLM → Evaluator) with per-stage
+  wall-clock timing. No DB writes; confidence gate shown as info, not enforced.
+- **Ticket Search tab** — keyword + status/category/priority filter search with
+  paginated results. "Open →" navigates directly to the Resolution tab with the
+  selected ticket pre-loaded (cross-tab navigation).
 - **Prometheus metrics + Grafana dashboards** — 5 domain metrics wired into the
   orchestrator; auto-provisioned Grafana dashboard ships with the compose stack.
 - **Six-evaluator CI suite** — classification F1, RAG Precision@5, LLM judge,
@@ -171,7 +184,7 @@ Ticket In
 │   │   ├── rag/             # knowledge_base (BM25), retriever (hybrid), reranker (MMR), generator
 │   │   ├── agents/          # ClassifierAgent, RAGAgent, EvaluatorAgent, TicketOrchestrator
 │   │   ├── routing/         # TicketRouter (5 deterministic rules), EscalationDetector
-│   │   ├── api/             # routes, auth middleware, rate limiter, websocket, envelope
+│   │   ├── api/             # routes (tickets, resolutions, kb, sandbox, health, auth), middleware, websocket
 │   │   └── monitoring/      # Prometheus metrics (5 counters/histograms)
 │   ├── scripts/
 │   │   ├── setup_db.py              # idempotent schema provisioning (no Alembic)
@@ -202,9 +215,10 @@ Ticket In
 │   │   ├── features/
 │   │   │   ├── auth/                # LoginForm, useAuth
 │   │   │   ├── intake/              # IntakeTab, useIngestTicket
-│   │   │   ├── resolution/          # ResolutionTab, ReclassifyPanel, useTickets, useWebSocket
-│   │   │   ├── kb/                  # KBTab
-│   │   │   ├── agent-sandbox/       # AgentTab (pipeline trace debugger)
+│   │   │   ├── resolution/          # ResolutionTab, ReclassifyPanel, useTickets (limit 15), useWebSocket
+│   │   │   ├── tickets/             # TicketSearchTab (keyword + filter search, cross-tab nav)
+│   │   │   ├── kb/                  # KBTab (semantic search + KBEntryModal)
+│   │   │   ├── agent-sandbox/       # AgentTab (5-stage pipeline trace with timing)
 │   │   │   └── analytics/           # AnalyticsTab (ticket metrics + bar charts)
 │   │   ├── shared/                  # ConfidenceBadge, DomainBadge, ClassificationPanel, RoutingPanel
 │   │   └── app/                     # App.tsx (tab shell + auth gate), routes.tsx
@@ -578,14 +592,26 @@ All other endpoints require `Authorization: Bearer <access_token>`.
 |---|---|---|
 | `POST` | `/tickets/ingest` | Submit a ticket. Returns `202` immediately; pipeline runs in the background. |
 | `GET` | `/tickets/{id}` | Get a ticket with classification + resolution. |
-| `GET` | `/tickets/` | List tickets. Filters: `category`, `status`, `priority`, `offset`, `limit`. |
+| `GET` | `/tickets/` | List/search tickets. Filters: `q` (keyword ILIKE), `category`, `status`, `priority`, `offset`, `limit`. |
 | `PATCH` | `/tickets/{id}/reclassify` | Override the category for an `awaiting_review` ticket. Resumes the pipeline. Body: `{"category": "infrastructure"}`. |
 
 ### Resolutions
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/resolutions/{ticket_id}/feedback` | Submit resolution feedback. Body: `{"action": "accepted"\|"modified"\|"rejected", "modified_resolution": [...]}`. Returns `204`. |
+| `POST` | `/resolutions/{ticket_id}/feedback` | Submit resolution feedback. Body: `{"action": "accepted"\|"modified"\|"rejected", "modified_resolution": [...]}`. Returns `204`. `accepted`/`modified` → `closed`; `rejected` → `escalated`. Modified steps are persisted to `resolutions.suggested_steps`. |
+
+### Knowledge Base
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/kb/` | Search KB entries. `q` triggers semantic vector search (pgvector ANN + cosine). Without `q`, returns a paginated browse. Optional `category` filter. Results include `relevance_score` on semantic hits. |
+
+### Agent Sandbox
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/sandbox/run` | Run a description through the full 5-stage pipeline and return a timed trace. No DB writes. Confidence gate is shown as info but not enforced — all stages always run. |
 
 ### Health & Metrics
 

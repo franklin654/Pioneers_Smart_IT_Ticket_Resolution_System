@@ -24,26 +24,29 @@ src/
       index.ts
     resolution/
       components/ResolutionTab.tsx
-      components/ReclassifyPanel.tsx   # NEW — human-in-the-loop reclassification UI
-      hooks/useTickets.ts
+      components/ReclassifyPanel.tsx   # human-in-the-loop reclassification UI
+      hooks/useTickets.ts              # fetches 15 most recent tickets for sidebar
       hooks/useWebSocket.ts
       index.ts
+    tickets/                           # NEW — keyword/filter ticket search
+      components/TicketSearchTab.tsx
+      index.ts
     kb/
-      components/KBTab.tsx
+      components/KBTab.tsx             # semantic search + KBEntryModal
       index.ts
     agent-sandbox/
-      components/AgentTab.tsx
+      components/AgentTab.tsx          # 5-stage pipeline trace with per-stage timing
       index.ts
     analytics/
       components/AnalyticsTab.tsx
       index.ts
   shared/
     components/  ConfidenceBadge.tsx, DomainBadge.tsx, ClassificationPanel.tsx, RoutingPanel.tsx
-    constants.ts  DOMAIN_STYLES, TERMINAL_STATUSES, STATUS_STEP_MAP, etc.
+    constants.ts  DOMAIN_STYLES, STATUS_STEP_MAP, STATUS_LABELS, STATUS_COLORS, etc.
     utils.ts
   app/
-    App.tsx
-    routes.tsx
+    App.tsx        # lifts pendingTicketId for cross-tab navigation
+    routes.tsx     # TabRoute with component: ComponentType | null for prop-injected tabs
 ```
 
 Each feature's `index.ts` is the only import surface other features may use,
@@ -88,6 +91,60 @@ Because the backend now returns structured steps (see
 `splitSteps()` markdown-parsing utility (and the bug class it caused — UAT KB-05) is
 deleted entirely; components render `resolution.suggested_steps.map(...)` directly.
 
+## Tab Map
+
+| Tab | Icon | Component | Notes |
+|---|---|---|---|
+| Submit Ticket | ＋ | `IntakeTab` | Ingest form + live status stream |
+| Ticket Search | 🔍 | `TicketSearchTab` | Keyword + filter search; "Open →" navigates to Resolution |
+| Resolution | ⚡ | `ResolutionTab` | Sidebar (15 most recent) + detail + feedback flow |
+| Knowledge Base | 📚 | `KBTab` | Semantic search + `KBEntryModal` |
+| Agent Sandbox | 🔬 | `AgentTab` | 5-stage pipeline trace (no DB writes) |
+| Analytics | 📊 | `AnalyticsTab` | Status + category charts |
+
+`App.tsx` renders `TicketSearchTab` and `ResolutionTab` directly (passing injected
+props) rather than via `TabRoute.component`, which is `null` for those two tabs.
+All other tabs are rendered generically.
+
+## Cross-Tab Navigation (Ticket Search → Resolution)
+
+`App.tsx` lifts `pendingTicketId: string | null` state. Clicking "Open →" in
+`TicketSearchTab` calls `onOpenTicket(id)`, which sets the pending ID and switches
+`activeTab` to `"resolution"`. `ResolutionTab` receives `initialTicketId` and a
+`useEffect` auto-selects the ticket on mount/change. Navigating away from Resolution
+clears the pending ID so stale pre-selection cannot occur on subsequent tab switches.
+
+## Feedback Flow
+
+`ResolutionTab` shows feedback controls only when `awaitingFeedback` is `true`.
+`awaitingFeedback` is derived from server state: only `auto_resolved` and `assigned`
+statuses need a human decision. Closed and escalated tickets show a static banner
+instead ("Resolution was accepted — ticket is closed." etc.).
+
+```tsx
+const awaitingFeedback = activeTicket?.status === "auto_resolved"
+                      || activeTicket?.status === "assigned";
+```
+
+This prevents buttons reappearing on page reload for tickets already acted on —
+the server status is the single source of truth.
+
+The **Modify** action renders an inline step editor with:
+- Textarea per step for free-form editing.
+- Delete (✕) button per step with automatic re-numbering.
+- `+ Add step` button appending a blank step.
+- Submit / Cancel — submit calls `sendFeedback("modified", steps)` which POSTs to
+  `/resolutions/{id}/feedback` and the backend persists the edited steps to
+  `resolutions.suggested_steps`.
+
+## Knowledge Base Modal
+
+`KBTab` shows a card per result with a truncated description and a relevance score
+badge (`{score * 100}% match`) when the result comes from semantic search. Clicking
+"View full entry →" opens `KBEntryModal` — an overlay with the full resolution
+content, category badge, date, and source ticket ID. Closes on Escape or backdrop
+click.
+
 ## Reclassification Flow (new)
 
 `ResolutionTab.tsx`, when `activeTicket.status === "awaiting_review"`:
@@ -108,6 +165,8 @@ deleted entirely; components render `resolution.suggested_steps.map(...)` direct
 `shared/constants.ts`:
 
 ```ts
+// Note: TERMINAL_STATUSES is kept for display/routing purposes but is NOT used
+// to gate feedback buttons — use awaitingFeedback (server status) for that.
 export const TERMINAL_STATUSES = ["auto_resolved", "assigned", "escalated", "closed"] as const;
 // awaiting_review is intentionally excluded — the pipeline resumes
 
